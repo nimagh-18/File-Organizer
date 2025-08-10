@@ -7,6 +7,7 @@ from typing import Any, Generator
 
 import ijson
 import typer
+from constants import SystemProtector
 from loguru import logger
 from tqdm import tqdm
 from typing_extensions import Annotated
@@ -465,9 +466,65 @@ def create_dirs_and_move_files(
         )
 
 
+# --- validate_directory_access function ---
+_system_protector_instance = SystemProtector()  # Instantiate once globally or pass it
+
+
+def validate_directory_access(path: Path) -> bool:
+    """Validate directory is safe and accessible."""
+    # First check existence and permissions
+    if not path.exists():
+        logger.error(f"Error: Path does not exist: {path}")
+        typer.echo(
+            typer.style(
+                f"Error: The path '{path}' does not exist.", fg=typer.colors.RED
+            )
+        )
+        return False
+
+    if not path.is_dir():
+        logger.error(f"Error: Path is not a directory: {path}")
+        typer.echo(
+            typer.style(
+                f"Error: The path '{path}' is not a directory.", fg=typer.colors.RED
+            )
+        )
+        return False
+
+    if not os.access(path, os.R_OK | os.W_OK):
+        logger.error(f"Error: Insufficient permissions for path: {path}")
+        typer.echo(
+            typer.style(
+                f"Error: Insufficient permissions to read/write in '{path}'.",
+                fg=typer.colors.RED,
+            )
+        )
+        return False
+
+    # Then check protection status using the global instance
+    if _system_protector_instance.is_protected(path):
+        logger.warning(f"Attempted to access protected path: {path}")
+        typer.echo(
+            typer.style(
+                f"Error: You cannot organize a protected system or sensitive directory: '{path}'. Operation cancelled.",
+                fg=typer.colors.RED,
+            )
+        )
+        return False
+
+    return True
+
+
 @app.command()
 def organize(
     path: Annotated[str, typer.Argument(help="Path of the directory to organize")],
+    include_hidden: Annotated[
+        bool,
+        typer.Option(
+            "--include-hidden",
+            help="Include hidden files (starting with '.') and system files in the organization process.",
+        ),
+    ] = False,
 ) -> None:
     """
     Organize an directory.
@@ -476,7 +533,12 @@ def organize(
     """
     DIR_PATH = Path(path)
 
+    if not validate_directory_access(DIR_PATH):
+        raise typer.Exit(1)
+
     UNCATEGORIZED_DIR = DIR_PATH.joinpath("Other")  # dir for unknown files
+
+    print(include_hidden)
 
     # Request to verify from user
     if not typer.confirm(
