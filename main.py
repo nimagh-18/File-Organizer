@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 import sys
@@ -10,7 +12,7 @@ import typer
 from constants import SystemProtector
 from loguru import logger
 from tqdm import tqdm
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Optional
 
 # --- Settings ---
 BATCH_SIZE = 50  # The number of items we keep in the file and cleansing before saving
@@ -242,20 +244,39 @@ def undo_files(last_history_file_path: Path) -> tuple[int, int, list[Path]]:
     return moved_back_count, errors_count, dirs_path
 
 
-def remove_dirs(dirs_path: list[Path]) -> tuple[int, int]:
+def remove_dirs(
+    path: Path | None = None,
+    dirs_path: list[Path] | None = None,
+) -> tuple[int, int]:
     """
-    Removes a list of directories created during the organization process.
+    Removes a list of empty directories.
 
-    This function iterates through the list of directory paths in reverse order
-    to ensure child directories are removed before parent directories. It removes
-    only empty directories and handles non-empty directories gracefully.
+    This function is designed to clean up empty directories, especially those left
+    over after a file organization process. It prioritizes removing a specific
+    list of directories. If no list is provided, it attempts to remove all
+    subdirectories within a given path.
 
-    :param dirs_path: A list of Path objects for the directories to be removed.
+    The function iterates through the directories in reverse order to ensure
+    child directories are removed before their parents. It only removes empty
+    directories and handles non-empty ones gracefully, logging a warning.
+
+    :param path: An optional Path object of a parent directory. If 'dirs_path' is not provided,
+                 the function will attempt to remove all subdirectories of this path.
+    :param dirs_path: An optional list of Path objects for the specific directories to be removed.
+                      This parameter takes precedence over 'path'.
     :return: A tuple containing the count of directories successfully removed
              and the number of errors encountered.
     """
+    skip_errors = False
+
     removed_dirs_count = 0
     errors_count = 0
+
+    if not dirs_path:
+        if not path:
+            raise FileNotFoundError()
+        dirs_path = [f for f in path.iterdir() if f.is_dir()]
+        skip_errors = True
 
     for dir_path in reversed(dirs_path):
         if not dir_path.exists():
@@ -267,11 +288,12 @@ def remove_dirs(dirs_path: list[Path]) -> tuple[int, int]:
             logger.success(f"Directory removed: {dir_path.name}")
             removed_dirs_count += 1
         except OSError as e:
-            # Catch OSError for non-empty directory removal
-            logger.warning(
-                f"Could not remove directory {dir_path.name}: {e}. It might not be empty."
-            )
-            errors_count += 1
+            if not skip_errors:
+                # Catch OSError for non-empty directory removal
+                logger.warning(
+                    f"Could not remove directory {dir_path.name}: {e}. It might not be empty."
+                )
+                errors_count += 1
 
     return removed_dirs_count, errors_count
 
@@ -286,7 +308,7 @@ def undo() -> None:
 
     moved_back_count, file_errors_count, dirs_path = undo_files(last_history_file_path)
 
-    removed_dirs_count, dirs_errors_count = remove_dirs(dirs_path)
+    removed_dirs_count, dirs_errors_count = remove_dirs(dirs_path=dirs_path)
 
     errors_count = file_errors_count + dirs_errors_count
 
@@ -553,6 +575,7 @@ def organize(
     file_categories = load_config()
 
     create_dirs_and_move_files(DIR_PATH, UNCATEGORIZED_DIR, file_categories)
+    remove_dirs(DIR_PATH)
 
 
 if __name__ == "__main__":
