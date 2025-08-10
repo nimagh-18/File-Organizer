@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Generator
 
+import ijson
 import typer
 from loguru import logger
 from tqdm import tqdm
@@ -148,54 +149,38 @@ def get_last_history() -> Path:
     return last_history_file_path
 
 
-def stream_history_file(file_path: Path) -> Generator[dict[str, Any], None, None]:
+def stream_history_file(file_path: Path) -> Generator[Any, Any, None]:
     """
-    Reads a history JSON file line by line and yields each JSON object
-    as a dictionary. This allows for processing large files without loading
-    the entire file into memory at once.
+    Reads a history JSON file using the ijson library for streaming.
 
-    :param file_path: The Path object of the history JSON file.
-    :return: A generator that yields one dictionary per line.
+    :param file_path: The path to the history JSON file.
+    :yield: A dictionary for each object in the top-level JSON array.
     """
     if not file_path.exists():
         print(f"Error: The history file at '{file_path}' was not found.")
         return
 
     try:
-        with open(file_path, encoding="utf-8") as f:
-            python_str = ""
+        with open(file_path, "rb") as f:
+            objects = ijson.items(f, "item")
 
-            for line in f:
-                line: str = line.strip()
-
-                if line in {"[", "]"}:
-                    continue
-                # If json object is complete
-                if "}," in line or "}" in line:
-                    line = line.removesuffix(",")
-
-                    python_str += line
-                    history: dict[str, str] = json.loads(python_str)
-                    python_str = ""
-
-                    yield history
-                    continue
-
-                python_str += line
-
+            yield from objects
     except Exception as e:
-        print(f"An unexpected error occurred while reading the file: {e}")
+        print(f"An unexpected error occurred: {e}")
 
 
-# TODO: add logic for this function
-@app.command()
-def undo() -> None:
-    """Transfer the content of the folder to its latest status before categorization."""
-    try:
-        last_history_file_path: Path = get_last_history()
-    except typer.Exit:
-        return
+def undo_files(last_history_file_path: Path) -> tuple[int, int, list[Path]]:
+    """
+    Reverts file moves from the last organization operation and collects created directory paths.
 
+    This function reads the latest history file, moves files back to their
+    original locations, and records the paths of directories that were created.
+    It uses a dynamic progress bar for efficiency.
+
+    :param last_history_file_path: The path to the latest history JSON file.
+    :return: A tuple containing the count of files moved back, the number of errors
+             during file moves, and a list of Path objects for the directories to be removed.
+    """
     pbar = tqdm(
         desc=typer.style("Undoing actions", fg=typer.colors.GREEN),
         unit="action",
@@ -204,7 +189,6 @@ def undo() -> None:
     )
 
     moved_back_count = 0
-    removed_dirs_count = 0
     errors_count = 0
     total_files = 0
 
@@ -226,25 +210,26 @@ def undo() -> None:
             source_path = Path(history["source"])
             destination_path = Path(history["destination"])
 
-            if source_path.exists():
-                try:
-                    # Check if the destination already exists to avoid overwriting
-                    if destination_path.exists():
-                        logger.warning(
-                            f"Destination path {destination_path} already exists. Skipping move back."
-                        )
-                        continue
-
-                    source_path.rename(destination_path)
-                    logger.success(
-                        f"File moved back from {source_path.name} to {destination_path.parent}"
-                    )
-                    moved_back_count += 1
-                except Exception as e:
-                    logger.error(f"Error moving file back {source_path}: {e}")
-                    errors_count += 1
-            else:
+            if not source_path.exists():
                 logger.warning(f"File not found at source location: {source_path}")
+                continue
+
+            try:
+                # Check if the destination already exists to avoid overwriting
+                if destination_path.exists():
+                    logger.warning(
+                        f"Destination path {destination_path} already exists. Skipping move back."
+                    )
+                    continue
+
+                source_path.rename(destination_path)
+                logger.success(
+                    f"File moved back from {source_path.name} to {destination_path.parent}"
+                )
+                moved_back_count += 1
+            except Exception as e:
+                logger.error(f"Error moving file back {source_path}: {e}")
+                errors_count += 1
 
         elif action == "create_dir":
             dirs_path.append(Path(history["path"]))
@@ -253,19 +238,56 @@ def undo() -> None:
 
     pbar.close()
 
+    return moved_back_count, errors_count, dirs_path
+
+
+def remove_dirs(dirs_path: list[Path]) -> tuple[int, int]:
+    """
+    Removes a list of directories created during the organization process.
+
+    This function iterates through the list of directory paths in reverse order
+    to ensure child directories are removed before parent directories. It removes
+    only empty directories and handles non-empty directories gracefully.
+
+    :param dirs_path: A list of Path objects for the directories to be removed.
+    :return: A tuple containing the count of directories successfully removed
+             and the number of errors encountered.
+    """
+    removed_dirs_count = 0
+    errors_count = 0
+
     for dir_path in reversed(dirs_path):
-        if dir_path.exists():
-            try:
-                dir_path.rmdir()
-                logger.success(f"Directory removed: {dir_path.name}")
-                removed_dirs_count += 1
-            except OSError as e:
-                # Catch OSError for non-empty directory removal
-                logger.warning(
-                    f"Could not remove directory {dir_path.name}: {e}. It might not be empty."
-                )
-        else:
+        if not dir_path.exists():
             logger.debug(f"Directory not found: {dir_path.name}")
+            continue
+
+        try:
+            dir_path.rmdir()
+            logger.success(f"Directory removed: {dir_path.name}")
+            removed_dirs_count += 1
+        except OSError as e:
+            # Catch OSError for non-empty directory removal
+            logger.warning(
+                f"Could not remove directory {dir_path.name}: {e}. It might not be empty."
+            )
+            errors_count += 1
+
+    return removed_dirs_count, errors_count
+
+
+@app.command()
+def undo() -> None:
+    """Transfer the content of the folder to its latest status before categorization."""
+    try:
+        last_history_file_path: Path = get_last_history()
+    except typer.Exit:
+        return
+
+    moved_back_count, file_errors_count, dirs_path = undo_files(last_history_file_path)
+
+    removed_dirs_count, dirs_errors_count = remove_dirs(dirs_path)
+
+    errors_count = file_errors_count + dirs_errors_count
 
     if errors_count == 0:
         typer.echo(
@@ -429,14 +451,16 @@ def create_dirs_and_move_files(
         logger.success(f"Done: {moved} files moved, {errors} errors.")
         typer.echo(
             typer.style(
-                f"Done: {dirs_created} directory created, {moved} files moved, {errors} errors.", fg=typer.colors.GREEN
+                f"Done: {dirs_created} directory created, {moved} files moved, {errors} errors.",
+                fg=typer.colors.GREEN,
             )
         )
     else:
         logger.warning(f"Done: {moved} files moved, {errors} errors.")
         typer.echo(
             typer.style(
-                f"Done: {dirs_created} directory created, {moved} files moved, {errors} errors.", fg=typer.colors.YELLOW
+                f"Done: {dirs_created} directory created, {moved} files moved, {errors} errors.",
+                fg=typer.colors.YELLOW,
             )
         )
 
