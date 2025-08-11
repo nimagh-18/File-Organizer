@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generator
+from typing import TYPE_CHECKING, Any
 
 import ijson
 import typer
@@ -13,6 +14,9 @@ from loguru import logger
 from src.core.constants import SystemProtector
 from src.core.utils import find_project_root
 from tqdm import tqdm
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 # --- Settings ---
 BATCH_SIZE = 50  # The number of items we keep in the file and cleansing before saving
@@ -528,15 +532,82 @@ def create_dirs_and_move_files(
             )
 
 
-# --- validate_directory_access function ---
-_system_protector_instance = SystemProtector()  # Instantiate once globally or pass it
+def add_allowed_path_to_config(
+    new_path: str, config_path: Path = Path("config.json")
+) -> None:
+    """
+    Adds a new path to the list of allowed paths in the config file
+    for the current operating system.
+
+    :param new_path: The path string to be added (e.g., "/mnt/data").
+    :param config_path: The path to the config.json file.
+    """
+    try:
+        # Load the config file
+        with open(config_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+    except FileNotFoundError:
+        typer.echo(
+            typer.style(
+                f"Error: Config file not found at {config_path}.", fg=typer.colors.RED
+            )
+        )
+        return
+
+    # Map platform name to config keys
+    system = platform.system().lower()
+
+    if system not in {"windows", "darwin", "linux"}:
+        typer.echo(typer.style("Unsupported os!!!", fg=typer.colors.RED))
+        raise typer.Exit(1)
+
+    # Get the allowed paths for the current OS
+    allowed_paths = config_data.get("allowed_paths", {})
+    os_paths: list[str] | None = allowed_paths.get(system, None)
+
+    if os_paths is None:
+        # If the key doesn't exist, create it as an empty list
+        os_paths = []
+        allowed_paths[system] = os_paths
+
+    # Check if the path already exists to avoid duplicates
+    if new_path not in os_paths:
+        os_paths.append(new_path)
+        typer.echo(
+            typer.style(
+                f"✅ Path '{new_path}' added successfully for '{system}'.",
+                fg=typer.colors.GREEN,
+            )
+        )
+    else:
+        typer.echo(
+            typer.style(
+                f"⚠️ Path '{new_path}' already exists for '{system}'. No changes made.",
+                fg=typer.colors.YELLOW,
+            )
+        )
+        return
+
+    # Write the modified data back to the config file
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, indent=4, ensure_ascii=False)
 
 
-def validate_directory_access(path: Path) -> bool:
+def validate_directory_access(path: Path, force: bool) -> bool:
     """Validate directory is safe and accessible."""
-    # First check existence and permissions
+
+    # Load config and instantiate protector (this should be done once)
+    config = load_config()
+    protector = SystemProtector(config.get("allowed_paths", []))
+
+    # Check for force flag first
+    if force:
+        logger.warning(
+            f"Bypassing security checks for path '{path}' due to --force flag."
+        )
+        return True
+
     if not path.exists():
-        logger.error(f"Error: Path does not exist: {path}")
         typer.echo(
             typer.style(
                 f"Error: The path '{path}' does not exist.", fg=typer.colors.RED
@@ -545,7 +616,6 @@ def validate_directory_access(path: Path) -> bool:
         return False
 
     if not path.is_dir():
-        logger.error(f"Error: Path is not a directory: {path}")
         typer.echo(
             typer.style(
                 f"Error: The path '{path}' is not a directory.", fg=typer.colors.RED
@@ -554,7 +624,6 @@ def validate_directory_access(path: Path) -> bool:
         return False
 
     if not os.access(path, os.R_OK | os.W_OK):
-        logger.error(f"Error: Insufficient permissions for path: {path}")
         typer.echo(
             typer.style(
                 f"Error: Insufficient permissions to read/write in '{path}'.",
@@ -563,12 +632,12 @@ def validate_directory_access(path: Path) -> bool:
         )
         return False
 
-    # Then check protection status using the global instance
-    if _system_protector_instance.is_protected(path):
-        logger.warning(f"Attempted to access protected path: {path}")
+    # Use the new is_allowed method
+    if not protector.is_allowed(path):
         typer.echo(
             typer.style(
-                f"Error: You cannot organize a protected system or sensitive directory: '{path}'. Operation cancelled.",
+                f"Error: The path '{path}' is not an allowed directory. "
+                "Use --force to override this check.",
                 fg=typer.colors.RED,
             )
         )

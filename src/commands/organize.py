@@ -31,6 +31,7 @@ def organize(
             help="Show what actions would be taken without actually performing them. Use this to preview changes.",
         ),
     ] = False,
+    force: bool = typer.Option(False, "--force", "-f", help="Bypass security checks."),
 ) -> None:
     """
     Organize an directory.
@@ -39,8 +40,9 @@ def organize(
     """
     DIR_PATH = Path(path)
 
-    if not validate_directory_access(DIR_PATH):
-        raise typer.Exit(1)
+    # Pass the force flag to the validation function
+    if not validate_directory_access(DIR_PATH, force):
+        raise typer.Exit(code=1)
 
     UNCATEGORIZED_DIR = DIR_PATH.joinpath("Other")  # dir for unknown files
 

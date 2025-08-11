@@ -1,5 +1,5 @@
 import typer
-from src.commands import organize, undo, show_config, edit_config
+from src.commands import organize, undo, show_config, edit_config, add_path
 
 app = typer.Typer()
 
@@ -8,6 +8,7 @@ app.add_typer(organize.app)
 app.add_typer(undo.app)
 app.add_typer(show_config.app)
 app.add_typer(edit_config.app)
+app.add_typer(add_path.app)
 
 if __name__ == "__main__":
     app()
