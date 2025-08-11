@@ -11,8 +11,8 @@ import ijson
 import typer
 from loguru import logger
 from src.core.constants import SystemProtector
+from src.core.utils import find_project_root
 from tqdm import tqdm
-from typing_extensions import Annotated
 
 # --- Settings ---
 BATCH_SIZE = 50  # The number of items we keep in the file and cleansing before saving
@@ -22,7 +22,9 @@ BATCH_SIZE = 50  # The number of items we keep in the file and cleansing before 
 logger.remove()
 
 # Configure Loguru to write to a log file
-log_dir = Path(__file__).parent.joinpath("logs")
+project_root = find_project_root(Path(__file__))
+log_dir = project_root.joinpath("src/logs")
+
 log_dir.mkdir(exist_ok=True)
 log_path = log_dir.joinpath("organizer.log")
 
@@ -97,7 +99,7 @@ def get_last_history() -> Path:
 
     :return: The Path object of the most recent history file.
     """
-    logs_dir_path = Path("src/commands/logs")
+    logs_dir_path = Path("src/logs")
 
     histories_date_and_time: list[datetime] = []
 

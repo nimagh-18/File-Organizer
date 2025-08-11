@@ -1,89 +1,165 @@
 # File Organizer
 
-A powerful and fast command-line tool for organizing files into categorized directories based on their type. The tool also provides a robust undo functionality to revert the last operation.
+A powerful, modular, and efficient command-line tool for organizing files into categorized directories based on their type. Includes robust undo functionality, customizable configuration, and detailed logging.
 
 ## Features
 
-* **File Organization**: Moves files into dedicated directories (e.g., Images, Documents) based on their file extensions.
-* **Undo Functionality**: Reverts the last organization operation, restoring files to their original locations.
-* **Efficient Performance**: Utilizes libraries like `ijson` and `tqdm` for optimized memory management and dynamic progress bars, even with large file sets.
-* **Simple Configuration**: File categories can be easily configured and customized via a `config.json` file.
-* **Comprehensive Logging**: All operations are logged to a history file, enabling accurate tracking and error management.
+- **File Organization**: Automatically moves files into categorized folders (e.g., Images, Documents, Videos) based on file extensions defined in `config.json`.
+- **Undo Functionality**: Reverts the last organization operation, restoring files and directories to their previous state.
+- **Customizable Configuration**: Easily edit file categories and rules via `config.json` using a built-in editor command.
+- **Comprehensive Logging**: All operations are logged for transparency and troubleshooting.
+- **Progress Bars**: Uses `tqdm` for dynamic progress bars during file operations.
+- **Efficient Memory Usage**: Handles large directories efficiently with streaming and batching.
+- **System Protection**: Prevents organizing sensitive or system directories.
+- **Command-Line Interface**: Built with Typer for a modern CLI experience.
+
+## Before & After Example
+
+Suppose you have a folder with mixed files:
+
+**Before running File Organizer:**
+
+```
+your-folder/
+├── photo1.jpg
+├── doc1.pdf
+├── song1.mp3
+├── script.py
+├── notes.txt
+├── video1.mp4
+├── random.zip
+```
+
+**After running File Organizer:**
+
+```
+your-folder/
+├── Images/
+│   └── photo1.jpg
+├── Documents/
+│   ├── doc1.pdf
+│   └── notes.txt
+├── Audio/
+│   └── song1.mp3
+├── Code/
+│   └── script.py
+├── Videos/
+│   └── video1.mp4
+├── Archives/
+│   └── random.zip
+```
 
 ## Installation
 
 To set up this project, use the `uv` package manager.
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/nimagh-18/File-Organizer.git
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/nimagh-18/File-Organizer.git
+   cd File-Organizer
+   ```
 
-    cd File-Organizer
-    ```
+2. **Create and activate a virtual environment:**
+   ```bash
+   uv venv
+   source .venv/bin/activate
+   ```
 
-2.  **Create and activate a virtual environment:**
-    ```bash
-    uv venv
-
-    # For Windows:
-    .\.venv\Scripts\activate
-    
-    # For macOS/Linux:
-    source .venv/bin/activate
-    ```
-
-3.  **Install dependencies:**
-    ```bash
-    uv sync
-    ```
+3. **Install dependencies:**
+   ```bash
+   uv sync
+   ```
 
 ## Usage
 
-The File Organizer tool can be run using `python -m file_organizer`.
+All commands are available via the CLI. Run the main entry point:
+
+```bash
+python cli.py [COMMAND] [OPTIONS]
+```
 
 ### Organize Files
 
-To organize files in a directory, pass the directory path as an argument:
+Organize files in a directory:
 
 ```bash
-python -m main.py organize "/path/to/your/files"
+python cli.py organize "/path/to/your/files"
+```
+- Add `--include-hidden` to include hidden/system files.
+
+### Undo Last Operation
+
+Revert the last organization:
+
+```bash
+python cli.py undo
 ```
 
-### Undo Operation
+### Show Current Configuration
 
-To revert the last organize operation, use the following command:
+Display the current file categorization rules:
 
 ```bash
-python -m main.py undo
+python cli.py show-config
 ```
 
-### View and Edit Configuration
+### Edit Configuration
+
+Open `config.json` in your system's default text editor:
 
 ```bash
-python -m main.py show-config
-    
-python -m main.py edit-config
-```    
+python cli.py edit-config
+```
 
 ## Configuration
 
-File categorization is managed in config.json. The file uses file extensions as keys and the desired directory name as the value.
+File categorization is managed in `config.json`. Each key is a file extension, and the value is the target directory name.
 
 Example:
 
-```JSON
-{      
+```json
+{
     ".jpg": "Images",
-    ".png": "Images", 
-    ".mp4": "Videos",  
-    ".pdf": "Documents"
+    ".pdf": "Documents",
+    ".mp4": "Videos"
 }
 ```
+You can edit this file directly or use the `edit-config` command.
+
+## Logging & Undo
+
+- All operations are logged in the `src/logs/` directory.
+- Undo uses the latest log to restore files and remove created directories.
+
+## System Protection
+
+The tool will not allow organizing system or sensitive directories (e.g., `/`, `/etc`, user home, `.config`, etc.) for safety.
+
+## Dependencies
+
+- [Typer](https://typer.tiangolo.com/)
+- [Tqdm](https://tqdm.github.io/)
+- [Loguru](https://github.com/Delgan/loguru)
+- [ijson](https://pypi.org/project/ijson/)
+
+## Roadmap
+
+Planned features for future releases:
+- Multi-directory input support
+- Advanced pattern/rule-based categorization (regex, size, date, etc.)
+- Dry-run mode for previewing changes
+- Multi-level undo/history
+- Parallel/multi-threaded processing
+- HTML/Markdown operation reports
+- Real-time folder watch mode
+- AI-based file type detection
+
+See `needed_features.txt` for more details.
 
 ## Contributing
 
-Feel free to submit issues, fork the repository, and send pull requests.
+Contributions are welcome! Please open issues or submit pull requests.
 
 ## License
 
-This project is licensed under the \[Insert your license here, e.g., MIT\] License.
+This project is licensed under the MIT License. See the `LICENSE` file for details.
