@@ -235,6 +235,7 @@ def undo_files(last_history_file_path: Path) -> tuple[int, int, list[Path]]:
 def remove_dirs(
     path: Path | None = None,
     dirs_path: list[Path] | None = None,
+    dry_run: bool = False,
 ) -> tuple[int, int]:
     """
     Removes a list of empty directories.
@@ -255,41 +256,102 @@ def remove_dirs(
     :return: A tuple containing the count of directories successfully removed
              and the number of errors encountered.
     """
-    skip_errors = False
+    # The `skip_errors` logic might need careful review depending on how you want to handle
+    # non-empty directories during dry_run when not explicitly passing dirs_path.
+    # For now, keeping it simple:
+    skip_os_errors = False
 
     removed_dirs_count = 0
     errors_count = 0
 
     if not dirs_path:
         if not path:
-            raise FileNotFoundError()
+            raise FileNotFoundError("Either 'path' or 'dirs_path' must be provided.")
+        # Only iterate over actual directories for removal candidates
         dirs_path = [f for f in path.iterdir() if f.is_dir()]
-        skip_errors = True
+        skip_os_errors = True
 
     for dir_path in reversed(dirs_path):
         if not dir_path.exists():
             logger.debug(f"Directory not found: {dir_path.name}")
             continue
 
-        try:
-            dir_path.rmdir()
-            logger.success(f"Directory removed: {dir_path.name}")
-            removed_dirs_count += 1
-        except OSError as e:
-            if not skip_errors:
-                # Catch OSError for non-empty directory removal
-                logger.warning(
-                    f"Could not remove directory {dir_path.name}: {e}. It might not be empty."
+        if not dry_run:
+            # Actual removal logic
+            try:
+                dir_path.rmdir()
+                logger.success(f"Directory removed: {dir_path.name}")
+                removed_dirs_count += 1
+            except OSError as e:
+                # Catch OSError for non-empty directory removal or permission issues
+                if not skip_os_errors:
+                    logger.warning(
+                        f"Could not remove directory {dir_path.name}: {e}. It might not be empty or has permission issues."
+                    )
+                    errors_count += 1
+        else:
+            # dry_run is True
+            # Simulate removal: check if the directory is empty without actually deleting it
+            if dir_path.is_dir() and not list(dir_path.iterdir()):
+                typer.echo(
+                    typer.style(
+                        f"🗑️ Would remove empty directory: {dir_path.name}",  # Changed to .name for brevity, adjust as needed
+                        fg=typer.colors.BLUE,
+                    )
                 )
-                errors_count += 1
+                removed_dirs_count += 1
 
     return removed_dirs_count, errors_count
+
+
+def write_one_line(file_path: Path, line: str) -> None:
+    """
+    Writes a single line of text to a file in append mode.
+
+    This is primarily used to add simple characters like '[' or ']' to
+    the history log file.
+
+    :param file_path: The path of the file to write to.
+    :param line: The string to be written to the file.
+    """
+    with open(file_path, "a", encoding="utf-8") as jf:
+        jf.write(line)
+
+
+def write_entries(
+    file_path: Path,
+    batch_entries: list[dict[str, str]],
+    first_entry: bool = False,
+) -> None:
+    """
+    Appends a batch of JSON entries to a history log file.
+
+    This function serializes a list of dictionaries into a JSON format
+    and appends them to a file. It handles the formatting (adding commas)
+    to ensure the file remains a valid JSON array. The list of entries
+    is cleared after writing to free up memory.
+
+    :param file_path: The path of the file to append the entries to.
+    :param batch_entries: A list of dictionaries representing the actions
+                          to be logged. This list is cleared after writing.
+    :param first_entry: A flag to determine if this is the first entry in the JSON array,
+                        to prevent adding a leading comma.
+    """
+    with open(file_path, "a", encoding="utf-8") as jf:
+        for entry in batch_entries:
+            if not first_entry:
+                jf.write(",\n")
+            jf.write(json.dumps(entry, ensure_ascii=False, indent=4))
+            first_entry = False
+        batch_entries.clear()
+        jf.flush()
 
 
 def create_dirs_and_move_files(
     dir_path: Path,
     uncategorized_dir: Path,
     file_categories: dict[str, str],
+    dry_run: bool,
 ) -> None:
     """
     Organizes files in a given directory by moving them into subdirectories
@@ -304,6 +366,8 @@ def create_dirs_and_move_files(
                               uncategorized files will be moved.
     :param file_categories: A dictionary mapping file extensions (keys)
                             to category names (values).
+    :param dry_run: If True, simulates the organization process without
+                    making any changes to the file system.
     """
     dirs_created = 0
     moved = 0
@@ -313,48 +377,60 @@ def create_dirs_and_move_files(
         dict[str, str]
     ] = []  # List to store structured log entries for undo
 
+    # Use a different color and description for dry_run
+    pbar_color = typer.colors.CYAN if dry_run else typer.colors.GREEN
+    pbar_desc = "Simulating actions" if dry_run else "Performing actions"
     pbar = tqdm(
-        desc=typer.style("Create dirs and move files", fg=typer.colors.GREEN),
+        desc=typer.style(pbar_desc, fg=pbar_color),
         unit="action",
         ncols=80,
         total=None,
     )
 
-    # make a gener to give the files one
     all_files = (f for f in dir_path.iterdir() if f.is_file())
     total_files = 0
+    first_entry = True
 
-    history_file = log_dir.joinpath(
+    history_file_path: Path = log_dir.joinpath(
         f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     )
 
+    if not dry_run:
+        write_one_line(history_file_path, "[\n")
+
     created_dirs: set[Path] = set()
 
-    with open(history_file, "w", encoding="utf-8") as jf:
-        jf.write("[\n")
-        first_entry = True
+    file_suffixs: set[str] = set()
 
-        # loop for organize all files in given directory
-        for file in all_files:
-            total_files += 1
-            pbar.total = total_files  # update the total count in the progress bar
-            pbar.refresh()
+    for file in all_files:
+        total_files += 1
+        pbar.total = total_files
+        pbar.refresh()
 
-            destination_dir = file_categories.get(
-                file.suffix.lower(), uncategorized_dir
-            )
-            destination_path = dir_path.joinpath(destination_dir)
+        file_suffixs.add(file.suffix)
 
-            target_path = destination_path.joinpath(file.name)
+        destination_dir = file_categories.get(file.suffix.lower(), uncategorized_dir)
+        destination_path = dir_path.joinpath(destination_dir)
 
-            # Create directory only once
-            if destination_path not in created_dirs:
+        target_path = destination_path.joinpath(file.name)
+
+        # Create directory only once
+        if destination_path not in created_dirs:
+            if dry_run:
+                pbar.write(
+                    typer.style(
+                        f"📦 Would create directory: {destination_path.name}",
+                        fg=typer.colors.BLUE,
+                    )
+                )
+            else:
                 destination_path.mkdir(exist_ok=True)
-                created_dirs.add(destination_path)
-                dirs_created += 1
-
                 logger.info(f"Directory created: {destination_path}")
 
+            created_dirs.add(destination_path)
+            dirs_created += 1
+
+            if not dry_run:
                 batch_entries.append(
                     {
                         "timestamp": str(datetime.now()),
@@ -364,82 +440,92 @@ def create_dirs_and_move_files(
                     }
                 )
 
-            try:
-                # Preventing file overwrite
-                counter = 1
-                while target_path.exists():
-                    target_path = destination_path.joinpath(
-                        f"{file.stem}_{counter}{file.suffix}",
+        try:
+            # Preventing file overwrite
+            counter = 1
+            while target_path.exists():
+                target_path = destination_path.joinpath(
+                    f"{file.stem}_{counter}{file.suffix}",
+                )
+                counter += 1
+
+            # Save original path before moving
+            original_path = file.resolve()
+            new_path = target_path.resolve()
+
+            # Move file to destination_dir
+            if dry_run:
+                pbar.write(
+                    typer.style(
+                        f"📄 Would move: {file.name} -> {destination_path.name}",
+                        fg=typer.colors.BLUE,
                     )
-                    counter += 1
-
-                # Save original path before moving
-                original_path = file.resolve()
-                new_path = target_path.resolve()
-
-                # Move file to destination_dir
+                )
+            else:
                 file.rename(target_path)
-                moved += 1
-
                 logger.success(f"File moved from {original_path} to {new_path}")
                 batch_entries.append(
                     {
                         "timestamp": str(datetime.now()),
                         "action": "move_file",
-                        "source": str(new_path),  # New location
-                        "destination": str(original_path),  # Original location
+                        "source": str(new_path),
+                        "destination": str(original_path),
                         "original_name": file.name,
                         "status": "success",
                     }
                 )
 
-            except Exception as e:
-                # All error messages are now handled by Loguru
+            moved += 1
+
+        except Exception as e:
+            if dry_run:
+                pbar.write(
+                    typer.style(
+                        f"❌ Would have failed to move file {file.name}: {e}",
+                        fg=typer.colors.RED,
+                    )
+                )
+            else:
                 logger.error(f"Error moving file {file.name}: {e}")
-                errors += 1
+            errors += 1
 
-            # Save every 50 items once
-            if len(batch_entries) >= BATCH_SIZE:
-                for entry in batch_entries:
-                    if not first_entry:
-                        jf.write(",\n")
-                    jf.write(json.dumps(entry, ensure_ascii=False, indent=4))
-                    first_entry = False
-                batch_entries.clear()
-                jf.flush()
+        if len(batch_entries) >= BATCH_SIZE and not dry_run:
+            write_entries(history_file_path, batch_entries, first_entry)
+            first_entry = False
 
-            pbar.update(1)
+        pbar.update(1)
 
-        pbar.close()
+    pbar.close()
 
-        # Save the remaining items
-        if batch_entries:
-            for entry in batch_entries:
-                if not first_entry:
-                    jf.write(",\n")
-                jf.write(json.dumps(entry, ensure_ascii=False, indent=4))
-                first_entry = False
+    if batch_entries and not dry_run:
+        write_entries(history_file_path, batch_entries, first_entry)
+        write_one_line(history_file_path, "\n]")
 
-        # Close the json array
-        jf.write("\n]")
-
-    # Final summary is also handled by Loguru
-    if errors == 0:
-        logger.success(f"Done: {moved} files moved, {errors} errors.")
+    # Final summary with a clear distinction for dry_run
+    if dry_run:
         typer.echo(
             typer.style(
-                f"Done: {dirs_created} directory created, {moved} files moved, {errors} errors.",
-                fg=typer.colors.GREEN,
+                f"\n[Dry Run]: Would have created {dirs_created} directories: {sorted([d.name for d in created_dirs])}\n"
+                f"           Would have moved {moved} files with the following suffixes: {sorted(file_suffixs)}\n"
+                f"           and encountered {errors} potential errors.",
+                fg=typer.colors.CYAN,
             )
         )
     else:
-        logger.warning(f"Done: {moved} files moved, {errors} errors.")
-        typer.echo(
-            typer.style(
-                f"Done: {dirs_created} directory created, {moved} files moved, {errors} errors.",
-                fg=typer.colors.YELLOW,
+        if errors == 0:
+            typer.echo(
+                typer.style(
+                    f"\nDone: {dirs_created} directory created, {moved} files moved, {errors} errors.",
+                    fg=typer.colors.GREEN,
+                )
             )
-        )
+        else:
+            typer.echo(
+                typer.style(
+                    f"\nDone: {dirs_created} directory created, {moved} files moved, {errors} errors.",
+                    fg=typer.colors.YELLOW,
+                )
+            )
 
 
 # --- validate_directory_access function ---

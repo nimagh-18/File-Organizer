@@ -24,6 +24,13 @@ def organize(
             help="Include hidden files (starting with '.') and system files in the organization process.",
         ),
     ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show what actions would be taken without actually performing them. Use this to preview changes.",
+        ),
+    ] = False,
 ) -> None:
     """
     Organize an directory.
@@ -37,17 +44,18 @@ def organize(
 
     UNCATEGORIZED_DIR = DIR_PATH.joinpath("Other")  # dir for unknown files
 
-    # Request to verify from user
-    if not typer.confirm(
-        typer.style(
-            f"Are you sure you want to organize the directory '{DIR_PATH}'?",
-            fg=typer.colors.YELLOW,
-        )
-    ):
-        typer.echo(typer.style("Operation cancelled.", fg=typer.colors.RED))
-        raise typer.Exit()
+    if not dry_run:
+        # Request to verify from user
+        if not typer.confirm(
+            typer.style(
+                f"Are you sure you want to organize the directory '{DIR_PATH}'?",
+                fg=typer.colors.YELLOW,
+            )
+        ):
+            typer.echo(typer.style("Operation cancelled.", fg=typer.colors.RED))
+            raise typer.Exit()
 
     file_categories = load_config()
 
-    create_dirs_and_move_files(DIR_PATH, UNCATEGORIZED_DIR, file_categories)
-    remove_dirs(DIR_PATH)
+    create_dirs_and_move_files(DIR_PATH, UNCATEGORIZED_DIR, file_categories, dry_run)
+    remove_dirs(path=DIR_PATH, dry_run=dry_run)
