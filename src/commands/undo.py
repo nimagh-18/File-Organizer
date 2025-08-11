@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from src.core.operations import get_last_history, remove_dirs, undo_files
+from src.filesystem.dir_cleaner import remove_dirs
+from src.history.manager import get_last_history, undo_files
 
 app = typer.Typer()
 
@@ -16,9 +17,13 @@ def undo() -> None:
     except typer.Exit:
         return
 
+    removed_dirs_count = 0
+    dirs_errors_count = 0
+
     moved_back_count, file_errors_count, dirs_path = undo_files(last_history_file_path)
 
-    removed_dirs_count, dirs_errors_count = remove_dirs(dirs_path=dirs_path)
+    if dirs_path:
+        removed_dirs_count, dirs_errors_count = remove_dirs(dirs_path=dirs_path)
 
     errors_count = file_errors_count + dirs_errors_count
 

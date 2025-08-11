@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
-from src.core.operations import (
-    create_dirs_and_move_files,
-    load_config,
-    remove_dirs,
-    validate_directory_access,
-)
-from typing_extensions import Annotated
+from src.core.validator import load_config, validate_directory_access
+from src.filesystem.create_and_move import create_dirs_and_move_files
+from src.filesystem.dir_cleaner import remove_dirs
 
 app = typer.Typer()
 

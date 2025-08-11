@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 import typer
-from src.core.operations import add_allowed_path_to_config
+from src.config.edit_allowed_path import add_allowed_path_to_config
 
 app = typer.Typer()
 

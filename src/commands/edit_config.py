@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from src.core.operations import open_config_with_specific_editor
+from src.config.utils import open_config_with_specific_editor
 
 app = typer.Typer()
 

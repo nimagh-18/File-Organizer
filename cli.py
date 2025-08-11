@@ -1,9 +1,9 @@
 import typer
-from src.commands import organize, undo, show_config, edit_config, add_path
+from src.commands import add_path, edit_config, organize, show_config, undo
 
 app = typer.Typer()
 
-# اضافه کردن دستورات از ماژول‌های مختلف
+# Add commands from different modules
 app.add_typer(organize.app)
 app.add_typer(undo.app)
 app.add_typer(show_config.app)
