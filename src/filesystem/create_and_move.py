@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from os import stat_result
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
@@ -10,9 +10,10 @@ from src.history.json_writers import write_entries, write_one_line
 from tqdm import tqdm
 
 if TYPE_CHECKING:
+    from os import stat_result
     from pathlib import Path
 
-    from src.config.config_type_hint import FileCategoriesConfig
+    from src.config.config_type_hint import FileCategories
 
 # --- Settings ---
 BATCH_SIZE = 50  # The number of items we keep in the file and cleansing before saving
@@ -32,8 +33,7 @@ def format_size_to_mb(size_bytes: int) -> float:
 
 def create_dirs_and_move_files(
     dir_path: Path,
-    uncategorized_dir: Path,
-    file_categories: FileCategoriesConfig,
+    file_categories: FileCategories,
     dry_run: bool,
 ) -> None:
     """
@@ -41,19 +41,19 @@ def create_dirs_and_move_files(
     based on their file extensions.
 
     It creates new directories for each category (e.g., 'Images', 'Documents')
-    if they don't exist. Files without a matching category are moved to a
+    if they don't exist. Files without a matching category are moved_files_count to a
     specific 'Other' directory.
 
     :param dir_path: The path of the directory to be organized.
     :param uncategorized_dir: The Path object for the directory where
-                              uncategorized files will be moved.
+                              uncategorized files will be moved_files_count.
     :param file_categories: A dictionary mapping file extensions (keys)
                             to category names (values).
     :param dry_run: If True, simulates the organization process without
                     making any changes to the file system.
     """
-    dirs_created = 0
-    moved = 0
+    created_dir_count = 0
+    moved_files_count = 0
     errors = 0
 
     batch_entries: list[
@@ -75,7 +75,7 @@ def create_dirs_and_move_files(
     first_entry = True
 
     history_file_path: Path = log_dir.joinpath(
-        f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
     )
 
     if not dry_run:
@@ -83,21 +83,14 @@ def create_dirs_and_move_files(
 
     created_dirs: set[Path] = set()
 
-    file_suffixs: set[str] = set()
-
-    # Sorting categorization for correct transfer of files
-    sorted_categories = sorted(
-        file_categories.items(),
-        key=lambda f: f[1].get("size_gt_mb", 0),
-        reverse=True,
-    )
+    file_suffixes: set[str] = set()
 
     for file in all_files:
         total_files += 1
         pbar.total = total_files
         pbar.refresh()
 
-        file_suffixs.add(file.suffix)
+        file_suffixes.add(file.suffix)
 
         file_stat_info: stat_result = file.stat()
         file_size: float = format_size_to_mb(file_stat_info.st_size)
@@ -105,19 +98,27 @@ def create_dirs_and_move_files(
         mod_time_timestamp: float = file_stat_info.st_mtime
         mod_time: datetime = datetime.fromtimestamp(mod_time_timestamp)
 
-        for category, rules in sorted_categories:
-            if file.suffix in rules["extensions"]:
-                dir_limit_size: int = rules.get("size_gt_mb", 0)
+        destination_dir: str = ""
 
-                # Check if the file meets the size criteria
-                if file_size <= dir_limit_size:
-                    continue  # Skip files smaller than the size limit
+        for category in file_categories["categories"]:
+            if file.suffix in category.get("extensions", []):
+                for variant in category.get("variants", []):
+                    dir_min_size = variant.get("min_size_mb", 0)
+                    dir_max_size = variant.get("max_size_mb", float("inf"))
 
-                # Check if the file meets the date criteria
-                if "date_gt" in rules and mod_time <= datetime.fromisoformat(
-                    rules["date_gt"]
-                ):
-                    continue  # Skip files older than the specified date
+                    if file_size >= dir_min_size and file_size < dir_max_size:
+                        if "name" not in variant:
+                            typer.echo(
+                                typer.style(
+                                    "You'r filecategories variant has no name!!!",
+                                    fg=typer.colors.GREEN,
+                                )
+                            )
+                            raise typer.Exit(1)
+                        destination_dir += variant["name"] + "-"
+                        break
+
+                destination_dir += category["name"]
 
                 # If we reach here, the file matches the category
                 logger.info(
@@ -125,21 +126,18 @@ def create_dirs_and_move_files(
                 )
                 pbar.write(
                     typer.style(
-                        f"📄 Moving: {file.name} to {category} directory",
+                        f"📄 Moving: {file.name} to {destination_dir} directory",
                         fg=typer.colors.BLUE,
                     )
                 )
 
-                file_suffixs.add(file.suffix)
-
-                destination_dir = category
                 break
         else:
-            destination_dir = uncategorized_dir
+            destination_dir = file_categories["defaults"]["name"]
 
-        destination_path = dir_path.joinpath(destination_dir)
+        destination_path: Path = dir_path.joinpath(destination_dir)
 
-        target_path = destination_path.joinpath(file.name)
+        target_path: Path = destination_path.joinpath(file.name)
 
         # Create directory only once
         if (destination_path not in created_dirs) and (not destination_path.exists()):
@@ -155,7 +153,7 @@ def create_dirs_and_move_files(
                 logger.info(f"Directory created: {destination_path}")
 
             created_dirs.add(destination_path)
-            dirs_created += 1
+            created_dir_count += 1
 
             if not dry_run:
                 batch_entries.append(
@@ -190,7 +188,7 @@ def create_dirs_and_move_files(
                 )
             else:
                 file.rename(target_path)
-                logger.success(f"File moved from {original_path} to {new_path}")
+                logger.success(f"File moved_files_count from {original_path} to {new_path}")
                 batch_entries.append(
                     {
                         "timestamp": str(datetime.now()),
@@ -202,7 +200,7 @@ def create_dirs_and_move_files(
                     }
                 )
 
-            moved += 1
+            moved_files_count += 1
 
         except Exception as e:
             if dry_run:
@@ -232,8 +230,8 @@ def create_dirs_and_move_files(
     if dry_run:
         typer.echo(
             typer.style(
-                f"\n[Dry Run]: Would have created {dirs_created} directories: {sorted([d.name for d in created_dirs])}\n"
-                f"           Would have moved {moved} files with the following suffixes: {sorted(file_suffixs)}\n"
+                f"\n[Dry Run]: Would have created {created_dir_count} directories: {sorted([d.name for d in created_dirs])}\n"
+                f"           Would have moved_files_count {moved_files_count} files with the following suffixes: {sorted(file_suffixes)}\n"
                 f"           and encountered {errors} potential errors.",
                 fg=typer.colors.CYAN,
             )
@@ -242,14 +240,14 @@ def create_dirs_and_move_files(
         if errors == 0:
             typer.echo(
                 typer.style(
-                    f"\nDone: {dirs_created} directory created, {moved} files moved, {errors} errors.",
+                    f"\nDone: {created_dir_count} directory created, {moved_files_count} files moved_files_count, {errors} errors.",
                     fg=typer.colors.GREEN,
                 )
             )
         else:
             typer.echo(
                 typer.style(
-                    f"\nDone: {dirs_created} directory created, {moved} files moved, {errors} errors.",
+                    f"\nDone: {created_dir_count} directory created, {moved_files_count} files moved_files_count, {errors} errors.",
                     fg=typer.colors.YELLOW,
                 )
             )

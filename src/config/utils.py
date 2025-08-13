@@ -10,10 +10,9 @@ import yaml
 
 if TYPE_CHECKING:
     from src.config.config_type_hint import (
-        AllowedPathsConfig,
-        CombinedConfig,
-        FileCategoriesConfig,
-        FileRule,
+        DefaultPaths,
+        FileAndPathConfig,
+        FileCategories,
     )
 
 
@@ -44,7 +43,7 @@ def open_config_with_specific_editor(file_path: Path) -> None:
         typer.echo(f"An error occurred while opening the file: {e}")
 
 
-def optimize_config(config: FileCategoriesConfig) -> FileCategoriesConfig:
+def optimize_config(file_categories: FileCategories) -> None:
     """
     Optimize the file categories configuration by converting lists of extensions
     to sets for faster membership testing.
@@ -52,10 +51,9 @@ def optimize_config(config: FileCategoriesConfig) -> FileCategoriesConfig:
     :param config: The original file categories configuration.
     :return: An optimized configuration with sets for extensions.
     """
-    optimized_config: FileCategoriesConfig = {}
     # Iterate through each category and convert extensions to a set
     # This is to ensure faster membership testing later
-    if not isinstance(config, dict):
+    if not isinstance(file_categories, dict):
         typer.echo(
             typer.style(
                 "Invalid configuration format. Expected a dictionary.",
@@ -67,18 +65,14 @@ def optimize_config(config: FileCategoriesConfig) -> FileCategoriesConfig:
     # Iterate through each category in the config
     # and convert extensions to a set for faster lookups
     # This is useful for performance when checking file extensions later
-    for category, rules in config.items():
-        if "extensions" in rules:
-            rules["extensions"] = set(rules["extensions"])
-
-        optimized_config[category] = rules
-
-    return optimized_config
+    for category in file_categories["categories"]:
+        extensions = category.get("extensions", [])
+        category["extensions"] = set(extensions)
 
 
 def read_config(
     file_path: Path,
-) -> FileCategoriesConfig | AllowedPathsConfig | CombinedConfig:
+) -> FileCategories | DefaultPaths | FileAndPathConfig:
     """
     Reads a configuration file and returns its content as a dictionary.
 
@@ -98,7 +92,7 @@ def read_config(
             config = yaml.safe_load(file)
 
             if file_path.name == "file_categories.yaml":
-                config: dict[str, FileRule] = optimize_config(config)
+                optimize_config(config)
 
         except yaml.YAMLError as e:
             typer.echo(
@@ -111,7 +105,7 @@ def read_config(
 
 def load_config(
     *, file_categories: bool = True, allowed_paths: bool = False
-) -> FileCategoriesConfig | AllowedPathsConfig | CombinedConfig:
+) -> FileCategories | DefaultPaths | FileAndPathConfig:
     """
     Load specific or combined configurations from YAML files.
 

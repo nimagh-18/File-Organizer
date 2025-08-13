@@ -1,153 +1,177 @@
-"Documents":
-  "extensions": [
-    ".txt",
-    ".pdf",
-    ".docx",
-    ".doc",
-    ".xlsx",
-    ".xls",
-    ".pptx",
-    ".ppt",
-    ".odt",
-    ".ods",
-    ".csv",
-    ".db",
-    ".mdb",
-  ]
-"Images-Small":
-  "extensions": &images_extensions [
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".svg",
-    ".webp",
-    ".bmp",
-    ".tiff",
-    ".ico",
-  ]
-  "size_gt_mb": !!int 0
-"Images-Medium":
-  "extensions": *images_extensions
-  "size_gt_mb": !!int 1
-"Images-Large":
-  "extensions": *images_extensions
-  "size_gt_mb": !!int 5
-"Images-Extra-Large":
-  "extensions": *images_extensions
-  "size_gt_mb": !!int 10
-"Videos":
-  "extensions": [
-    ".mp4",
-    ".avi",
-    ".mkv",
-    ".mov",
-    ".wmv",
-    ".flv",
-    ".webm",
-    ".mpeg",
-    ".mpg",
-  ]
-"Audio":
-  "extensions": [
-    ".mp3",
-    ".wav",
-    ".aac",
-    ".ogg",
-    ".flac",
-    ".m4a",
-    ".wma",
-  ]
-"Archives":
-  "extensions": [
-    ".zip",
-    ".rar",
-    ".tar",
-    ".gz",
-    ".7z",
-  ]
-"Executable":
-  "extensions": [
-    ".exe",
-    ".msi",
-    ".bat",
-    ".sh",
-    ".cmd",
-  ]
-"Scripts":
-  "extensions": [
-    ".py",
-    ".js",
-    ".ts",
-    ".java",
-    ".c",
-    ".cpp",
-    ".cs",
-    ".rb",
-    ".php",
-    ".go",
-    ".html",
-    ".css",
-    ".xml",
-  ]
-"Configuration":
-  "extensions": [
-    ".yaml",
-    ".yml",
-    ".json",
-    ".ini",
-    ".conf",
-    ".toml",
-  ]
-"Fonts":
-  "extensions": [
-    ".ttf",
-    ".otf",
-    ".woff",
-    ".woff2",
-  ]
-"Miscellaneous":
-  "extensions": [
-    ".log",
-    ".tmp",
-    ".bak",
-    ".md",
-    ".rtf",
-    ".epub",
-    ".mobi",
-    ".azw3",
-    ".torrent",
-    ".iso",
-    ".dmg",
-    ".apk",
-    ".ipa",
-    ".bin",
-    ".cue",
-    ".nfo",
-    ".torrent",
-    ".part",
-    ".torrent",
-    ".torrent",
-  ]
-"Database":
-  "extensions": [
-    ".sqlite",
-    ".db3",
-    ".dbf",
-    ".mdb",
-    ".accdb",
-  ] 
-"Date":
-  "extensions": [
-    ".ics",
-    ".ical",
-    ".vcs",
-  ]
-"3D Models":
-  "extensions": [
-    ".stl",
-    ".obj",
-    ".fbx",
-    ".gltf",
-    ".glb",
-  ]
+# File Organizer Config - Unified Structure
+version: 2.0
+defaults:
+  name: "Other"
+  risk: "medium"
+  min_size_mb: 0
+  max_size_mb: null
+
+categories:
+  - name: "Documents"
+    type: "document"
+    extensions:
+      - ".txt"
+      - ".pdf"
+      - ".docx"
+      - ".doc"
+      - ".xlsx"
+      - ".xls"
+      - ".pptx"
+      - ".ppt"
+      - ".odt"
+      - ".ods"
+      - ".csv"
+      - ".db"
+      - ".mdb"
+
+  - name: "Images"
+    type: "image"
+    variants:
+      - name: "Small"
+        max_size_mb: 1
+      - name: "Medium"
+        min_size_mb: 1
+        max_size_mb: 5
+      - name: "Large"
+        min_size_mb: 5
+        max_size_mb: 10
+      - name: "Extra-Large"
+        min_size_mb: 10
+    extensions: &img_ext
+      - ".jpg"
+      - ".jpeg"
+      - ".png"
+      - ".gif"
+      - ".svg"
+      - ".webp"
+      - ".bmp"
+      - ".tiff"
+      - ".ico"
+
+  - name: "Videos"
+    type: "media"
+    extensions:
+      - ".mp4"
+      - ".avi"
+      - ".mkv"
+      - ".mov"
+      - ".wmv"
+      - ".flv"
+      - ".webm"
+      - ".mpeg"
+      - ".mpg"
+
+  - name: "Audio"
+    type: "media"
+    risk: "low"
+    extensions:
+      - ".mp3"
+      - ".wav"
+      - ".aac"
+      - ".ogg"
+      - ".flac"
+      - ".m4a"
+      - ".wma"
+
+  - name: "Archives"
+    type: "archive"
+    extensions:
+      - ".zip"
+      - ".rar"
+      - ".tar"
+      - ".gz"
+      - ".7z"
+
+  - name: "Executable"
+    type: "binary"
+    risk: "high"
+    extensions:
+      - ".exe"
+      - ".msi"
+      - ".bat"
+      - ".sh"
+      - ".cmd"
+
+  - name: "Scripts"
+    type: "code"
+    extensions:
+      - ".py"
+      - ".js"
+      - ".ts"
+      - ".java"
+      - ".c"
+      - ".cpp"
+      - ".cs"
+      - ".rb"
+      - ".php"
+      - ".go"
+      - ".html"
+      - ".css"
+      - ".xml"
+
+  - name: "Configuration"
+    type: "config"
+    risk: "high"
+    extensions:
+      - ".yaml"
+      - ".yml"
+      - ".json"
+      - ".ini"
+      - ".conf"
+      - ".toml"
+
+  - name: "Fonts"
+    type: "resource"
+    risk: "low"
+    extensions:
+      - ".ttf"
+      - ".otf"
+      - ".woff"
+      - ".woff2"
+
+  - name: "Miscellaneous"
+    type: "other"
+    extensions:
+      - ".log"
+      - ".tmp"
+      - ".bak"
+      - ".md"
+      - ".rtf"
+      - ".epub"
+      - ".mobi"
+      - ".azw3"
+      - ".iso"
+      - ".dmg"
+      - ".apk"
+      - ".ipa"
+      - ".bin"
+      - ".cue"
+      - ".nfo"
+      - ".part"
+
+  - name: "Database"
+    type: "data"
+    risk: "high"
+    extensions:
+      - ".sqlite"
+      - ".db3"
+      - ".dbf"
+      - ".mdb"
+      - ".accdb"
+
+  - name: "Date"
+    type: "calendar"
+    risk: "low"
+    extensions:
+      - ".ics"
+      - ".ical"
+      - ".vcs"
+
+  - name: "3D Models"
+    type: "model"
+    extensions:
+      - ".stl"
+      - ".obj"
+      - ".fbx"
+      - ".gltf"
+      - ".glb"

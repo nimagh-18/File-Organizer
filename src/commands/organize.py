@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from src.core.validator import load_config, validate_directory_access
 from src.filesystem.create_and_move import create_dirs_and_move_files
 from src.filesystem.dir_cleaner import remove_dirs
+
+if TYPE_CHECKING:
+    from config.config_type_hint import FileCategories
 
 app = typer.Typer()
 
@@ -41,8 +44,6 @@ def organize(
     if not validate_directory_access(DIR_PATH, force):
         raise typer.Exit(code=1)
 
-    UNCATEGORIZED_DIR = DIR_PATH.joinpath("Other")  # dir for unknown files
-
     if not dry_run:
         # Request to verify from user
         if not typer.confirm(
@@ -54,9 +55,7 @@ def organize(
             typer.echo(typer.style("Operation cancelled.", fg=typer.colors.RED))
             raise typer.Exit()
 
-    file_categories = load_config()
+    file_categories: FileCategories = load_config(file_categories=True)
 
-    # print(file_categories)
-
-    create_dirs_and_move_files(DIR_PATH, UNCATEGORIZED_DIR, file_categories, dry_run)
+    create_dirs_and_move_files(DIR_PATH, file_categories, dry_run)
     remove_dirs(path=DIR_PATH, dry_run=dry_run)

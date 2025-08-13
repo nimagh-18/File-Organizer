@@ -31,6 +31,7 @@ dependencies = [
     { name = "ijson" },
     { name = "loguru" },
     { name = "pyyml" },
+    { name = "rich" },
     { name = "tqdm" },
     { name = "typer" },
 ]
@@ -40,6 +41,7 @@ requires-dist = [
     { name = "ijson", specifier = ">=3.4.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pyyml", specifier = ">=0.0.2" },
+    { name = "rich", specifier = ">=14.1.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "typer", specifier = ">=0.16.0" },
 ]
