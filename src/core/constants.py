@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 class SystemProtector:
-    def __init__(self, allowed_paths_config: dict[str, str]) -> None:
+    def __init__(self, allowed_paths_config) -> None:
         system = platform.system().lower()
 
         if system == "linux":

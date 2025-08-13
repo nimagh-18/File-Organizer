@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from os import stat_result
 from typing import TYPE_CHECKING
 
 import typer
@@ -11,14 +12,28 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from src.config.config_type_hint import FileCategoriesConfig
+
 # --- Settings ---
 BATCH_SIZE = 50  # The number of items we keep in the file and cleansing before saving
+
+
+def format_size_to_mb(size_bytes: int) -> float:
+    """
+    Size in bytes to MB.
+
+    :param size_bytes: Size in bytes.
+    :return: Size in MB.
+    """
+    if size_bytes == 0:
+        return 0
+    return size_bytes / (1000 * 1000)
 
 
 def create_dirs_and_move_files(
     dir_path: Path,
     uncategorized_dir: Path,
-    file_categories: dict[str, str],
+    file_categories: FileCategoriesConfig,
     dry_run: bool,
 ) -> None:
     """
@@ -70,6 +85,13 @@ def create_dirs_and_move_files(
 
     file_suffixs: set[str] = set()
 
+    # Sorting categorization for correct transfer of files
+    sorted_categories = sorted(
+        file_categories.items(),
+        key=lambda f: f[1].get("size_gt_mb", 0),
+        reverse=True,
+    )
+
     for file in all_files:
         total_files += 1
         pbar.total = total_files
@@ -77,7 +99,44 @@ def create_dirs_and_move_files(
 
         file_suffixs.add(file.suffix)
 
-        destination_dir = file_categories.get(file.suffix.lower(), uncategorized_dir)
+        file_stat_info: stat_result = file.stat()
+        file_size: float = format_size_to_mb(file_stat_info.st_size)
+
+        mod_time_timestamp: float = file_stat_info.st_mtime
+        mod_time: datetime = datetime.fromtimestamp(mod_time_timestamp)
+
+        for category, rules in sorted_categories:
+            if file.suffix in rules["extensions"]:
+                dir_limit_size: int = rules.get("size_gt_mb", 0)
+
+                # Check if the file meets the size criteria
+                if file_size <= dir_limit_size:
+                    continue  # Skip files smaller than the size limit
+
+                # Check if the file meets the date criteria
+                if "date_gt" in rules and mod_time <= datetime.fromisoformat(
+                    rules["date_gt"]
+                ):
+                    continue  # Skip files older than the specified date
+
+                # If we reach here, the file matches the category
+                logger.info(
+                    f"File {file.name} matches category '{category}' with size {file_size:.2f} MB and modified on {mod_time}."
+                )
+                pbar.write(
+                    typer.style(
+                        f"📄 Moving: {file.name} to {category} directory",
+                        fg=typer.colors.BLUE,
+                    )
+                )
+
+                file_suffixs.add(file.suffix)
+
+                destination_dir = category
+                break
+        else:
+            destination_dir = uncategorized_dir
+
         destination_path = dir_path.joinpath(destination_dir)
 
         target_path = destination_path.joinpath(file.name)

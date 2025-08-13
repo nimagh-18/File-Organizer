@@ -10,5 +10,5 @@ app = typer.Typer()
 
 @app.command()
 def show_config() -> None:
-    config = load_config(file_categories=True, allowed_path=True)
+    config = load_config(file_categories=True, allowed_paths=True)
     typer.echo(json.dumps(config, indent=4, ensure_ascii=False))

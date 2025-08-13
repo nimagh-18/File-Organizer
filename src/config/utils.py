@@ -1,9 +1,20 @@
-import json
-import os
+from __future__ import annotations
+
+import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
+import yaml
+
+if TYPE_CHECKING:
+    from src.config.config_type_hint import (
+        AllowedPathsConfig,
+        CombinedConfig,
+        FileCategoriesConfig,
+        FileRule,
+    )
 
 
 def open_config_with_specific_editor(file_path: Path) -> None:
@@ -12,53 +23,125 @@ def open_config_with_specific_editor(file_path: Path) -> None:
 
     :param file_path: The Path object of the file you want to open.
     """
+    if sys.platform == "win32":
+        # On Windows, `start` or the file itself opens it with the default app
+        command = ["start", str(file_path)]
+    elif sys.platform == "darwin":  # macOS
+        command = ["open", "-a", "TextEdit", str(file_path)]
+    elif sys.platform.startswith("linux"):
+        command = ["xdg-open", str(file_path)]  # A standard way to open files
+    else:
+        typer.echo(f"Unsupported operating system: {sys.platform}")
+        return
+
     try:
-        if sys.platform == "win32":
-            # Windows: Uses the default simple Notepad editor
-            os.system(f"notepad.exe {file_path}")
-        elif sys.platform == "darwin":  # macOS
-            # macOS: Uses the default GUI TextEdit application
-            os.system(f"open -a TextEdit {file_path}")
-            # Alternative: For a simple terminal editor, use nano
-            # os.system(f"nano {file_path}")
-        elif sys.platform.startswith("linux"):
-            # Linux: Uses the simple and user-friendly nano editor
-            os.system(f"nano {file_path}")
-        else:
-            print(f"Unsupported operating system: {sys.platform}")
-
+        # We use `shell=True` for `start` on Windows but avoid it for others
+        is_shell = sys.platform == "win32"
+        subprocess.run(command, check=True, shell=is_shell)
     except FileNotFoundError:
-        print(f"Error: The file at {file_path} was not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+        typer.echo(f"Error: Could not find a suitable application to open {file_path}")
+    except subprocess.CalledProcessError as e:
+        typer.echo(f"An error occurred while opening the file: {e}")
 
 
-def load_config(*, file_categories: bool = True, allowed_path: bool = False) -> dict[str, str]:
+def optimize_config(config: FileCategoriesConfig) -> FileCategoriesConfig:
     """
-    Load needs config for organize a directory from config.json.
+    Optimize the file categories configuration by converting lists of extensions
+    to sets for faster membership testing.
 
-    :raises typer.Exit: if config.json is not exists
-    :return: organize config
+    :param config: The original file categories configuration.
+    :return: An optimized configuration with sets for extensions.
     """
-    if not Path("config.json").exists():
-        message = typer.style("config.json file not exists!!!\n", fg=typer.colors.RED)
-        typer.echo(message)
-
+    optimized_config: FileCategoriesConfig = {}
+    # Iterate through each category and convert extensions to a set
+    # This is to ensure faster membership testing later
+    if not isinstance(config, dict):
+        typer.echo(
+            typer.style(
+                "Invalid configuration format. Expected a dictionary.",
+                fg=typer.colors.RED,
+            )
+        )
         raise typer.Exit(1)
 
-    with open("config.json") as jf:
-        config = json.load(jf)
+    # Iterate through each category in the config
+    # and convert extensions to a set for faster lookups
+    # This is useful for performance when checking file extensions later
+    for category, rules in config.items():
+        if "extensions" in rules:
+            rules["extensions"] = set(rules["extensions"])
 
-        if file_categories:
-            return config["file_categories"]
-        if allowed_path:
-            return config["allowed_paths"]
-        elif allowed_path and file_categories:
-            return config
-        else:
-            typer.echo(typer.style(
-                "Invalid parameters for load_config function. "
-                "Please specify either 'file_categories' or 'allowed_path' or both.",
-                fg=typer.colors.RED,
-            ))
+        optimized_config[category] = rules
+
+    return optimized_config
+
+
+def read_config(
+    file_path: Path,
+) -> FileCategoriesConfig | AllowedPathsConfig | CombinedConfig:
+    """
+    Reads a configuration file and returns its content as a dictionary.
+
+    :param file_path: The Path object of the configuration file.
+    :return: A dictionary containing the configuration data.
+    """
+    if not file_path.exists():
+        typer.echo(
+            typer.style(
+                f"Configuration file {file_path} does not exist.", fg=typer.colors.RED
+            )
+        )
+        raise typer.Exit(1)
+
+    with open(file_path, encoding="utf-8") as file:
+        try:
+            config = yaml.safe_load(file)
+
+            if file_path.name == "file_categories.yaml":
+                config: dict[str, FileRule] = optimize_config(config)
+
+        except yaml.YAMLError as e:
+            typer.echo(
+                typer.style(f"Error reading YAML file: {e}", fg=typer.colors.RED)
+            )
             raise typer.Exit(1)
+        else:
+            return config
+
+
+def load_config(
+    *, file_categories: bool = True, allowed_paths: bool = False
+) -> FileCategoriesConfig | AllowedPathsConfig | CombinedConfig:
+    """
+    Load specific or combined configurations from YAML files.
+
+    :raises typer.Exit: If no parameters are set.
+    :returns: A dictionary representing the loaded configuration.
+    """
+    loaded_configs = {}
+    if file_categories:
+        loaded_configs["file_categories"] = read_config(
+            Path("src/config/file_categories.yaml")
+        )
+
+    if allowed_paths:
+        loaded_configs["allowed_paths"] = read_config(
+            Path("src/config/allowed_path.yaml")
+        )
+
+    if not loaded_configs:
+        typer.echo(
+            typer.style(
+                "Nothing to load, please set at least one of the parameters: "
+                "file_categories or allowed_paths.",
+                fg=typer.colors.RED,
+            )
+        )
+        raise typer.Exit(1)
+
+    # If only one type of config is requested, return it directly
+    if len(loaded_configs) == 1:
+        return next(iter(loaded_configs.values()))
+
+    # If both are requested, return a combined dictionary
+    return loaded_configs

@@ -16,7 +16,7 @@ def validate_directory_access(path: Path, force: bool) -> bool:
     """Validate directory is safe and accessible."""
 
     # Load config and instantiate protector (this should be done once)
-    config: dict[str, str] = load_config(file_categories=False, allowed_path=True)
+    config = load_config(file_categories=False, allowed_paths=True)
     protector = SystemProtector(config)
 
     # Check for force flag first

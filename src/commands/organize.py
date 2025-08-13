@@ -56,5 +56,7 @@ def organize(
 
     file_categories = load_config()
 
+    # print(file_categories)
+
     create_dirs_and_move_files(DIR_PATH, UNCATEGORIZED_DIR, file_categories, dry_run)
     remove_dirs(path=DIR_PATH, dry_run=dry_run)

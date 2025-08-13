@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import yaml
 import platform
 from pathlib import Path
 
@@ -8,7 +9,7 @@ import typer
 
 
 def add_allowed_path_to_config(
-    new_path: str, config_path: Path = Path("config.json")
+    new_path: str, config_path: Path = Path("src/config/allowed_path.yaml"),
 ) -> None:
     """
     Adds a new path to the list of allowed paths in the config file
@@ -19,8 +20,8 @@ def add_allowed_path_to_config(
     """
     try:
         # Load the config file
-        with open(config_path, "r", encoding="utf-8") as f:
-            config_data = json.load(f)
+        with open(config_path, encoding="utf-8") as yf:
+            allowed_paths = yaml.safe_load(yf)
     except FileNotFoundError:
         typer.echo(
             typer.style(
@@ -37,7 +38,6 @@ def add_allowed_path_to_config(
         raise typer.Exit(1)
 
     # Get the allowed paths for the current OS
-    allowed_paths = config_data.get("allowed_paths", {})
     os_paths: list[str] | None = allowed_paths.get(system, None)
 
     if os_paths is None:
@@ -65,4 +65,4 @@ def add_allowed_path_to_config(
 
     # Write the modified data back to the config file
     with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(config_data, f, indent=4, ensure_ascii=False)
+        json.dump(allowed_paths, f, indent=4, ensure_ascii=False)

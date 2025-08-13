@@ -1,0 +1,23 @@
+{
+    "linux": [
+        "/home/$USER/Desktop",
+        "/home/$USER/Documents",
+        "/home/$USER/Downloads",
+        "/home/$USER/Pictures",
+        "/home/$USER/Videos",
+    ],
+    "darwin": [
+        "/Users/$USER/Desktop",
+        "/Users/$USER/Documents",
+        "/Users/$USER/Downloads",
+        "/Users/$USER/Pictures",
+        "/Users/$USER/Movies"
+    ],
+    "windows": [
+        "%USERPROFILE%\\Desktop",
+        "%USERPROFILE%\\Documents",
+        "%USERPROFILE%\\Downloads",
+        "%USERPROFILE%\\Pictures",
+        "%USERPROFILE%\\Videos"
+    ]
+}
