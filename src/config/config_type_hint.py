@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional, TypedDict
 
-from typing_extensions import NotRequired
+from typing_extensions import NotRequired, Required
 
 
 class SizeVariant(TypedDict):
@@ -14,7 +14,7 @@ class SizeVariant(TypedDict):
     :param max_size_mb: Maximum size in MB (None if not defined).
     """
 
-    name: str
+    name: Required[str]
     min_size_mb: Optional[int]
     max_size_mb: Optional[int]
 
@@ -30,7 +30,7 @@ class Category(TypedDict, total=False):
     :param variants: Optional size-based subcategories.
     """
 
-    name: str
+    name: Required[str]
     type: str
     extensions: NotRequired[list[str] | set[str]]
     risk: NotRequired[Literal["low", "medium", "high"]]
@@ -47,7 +47,7 @@ class Defaults(TypedDict):
     :param max_size_mb: Default maximum file size in MB (None means no limit).
     """
 
-    name: str
+    name: Required[str]
     risk: Literal["low", "medium", "high"]
     min_size_mb: int
     max_size_mb: Optional[int]
@@ -62,9 +62,9 @@ class DefaultPaths(TypedDict):
     :param windows: Default folder paths for Windows systems.
     """
 
-    linux: list[str]
-    darwin: list[str]
-    windows: list[str]
+    linux: Required[list[str]]
+    darwin: Required[list[str]]
+    windows: Required[list[str]]
 
 
 class FileCategories(TypedDict):
@@ -91,4 +91,4 @@ class FileAndPathConfig(FileCategories):
     :param default_paths: Predefined user folder paths for supported operating systems.
     """
 
-    default_paths: DefaultPaths
+    default_paths: Required[DefaultPaths]

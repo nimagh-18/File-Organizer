@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from loguru import logger
 from src.config.utils import load_config
 from src.core.constants import SystemProtector
 
-
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def validate_directory_access(path: Path, force: bool) -> bool:
     """Validate directory is safe and accessible."""
-
     # Load config and instantiate protector (this should be done once)
     config = load_config(file_categories=False, allowed_paths=True)
     protector = SystemProtector(config)
