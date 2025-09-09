@@ -7,13 +7,16 @@ based on categorization rules, featuring advanced progress visualization.
 
 from __future__ import annotations
 
+import shutil
 from datetime import datetime
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Generator
 
 import typer
 from rich.console import Console
 from src.config.logging_config import log_dir, logger
+from src.core.validator import validate_glob_pattern
 from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
 from src.history.json_writers import write_entries, write_one_line
 from src.history.manager import get_last_history
@@ -47,8 +50,10 @@ def create_dirs_and_move_files(
     file_categories: FileCategories,
     *,
     dry_run: bool,
+    recursive: bool,
     new_history_file: bool = True,
     last_dir: bool = True,
+    pattern: str,
 ) -> tuple[int, int, int]:
     """
     Organize files in a directory by moving them into categorized subdirectories.
@@ -64,28 +69,50 @@ def create_dirs_and_move_files(
     :type dry_run: bool
     :raises typer.Exit: If category variant configuration is invalid
     """
+    validate_glob_pattern(pattern)
+
     console = Console()
 
     created_dir_count = 0
     moved_files_count = 0
     errors_count = 0
 
+    created_dirs: set[Path] = set()
+    file_suffixes: set[str] = set()
+
     batch_entries: list[
         dict[str, str]
     ] = []  # Structured log entries for undo functionality
 
-    all_files: Generator[Path, None, None] = (f for f in dir_path.iterdir() if f.is_file())
+    file_iteration_methods = {
+        "recursive": dir_path.rglob,
+        "not_recursive": dir_path.glob,
+    }
 
-    if not all_files:
-        console.print("[yellow]No files found to organize![/yellow]")
-        return
+    it: Generator[Path, None, None] = (
+        f
+        for f in (
+            file_iteration_methods["recursive"](pattern)
+            if recursive
+            else file_iteration_methods["not_recursive"](pattern)
+        )
+        if f.is_file()
+        and not any(f.is_relative_to(created_dir) for created_dir in created_dirs)
+    )
+
+    try:
+        first: Path = next(it)
+    except StopIteration:
+        console.print("[red]No files found to organize![/red]")
+        return 0, 0, 0
+    else:
+        all_files = chain([first], it)
 
     # Create instance without total_files -> auto-counting enabled
     display = BeautifulDisplayAndProgress()
 
     # Create progress bar
     progress = display.create_advanced_progress()
-
 
     if new_history_file:
         first_entry = True
@@ -99,9 +126,6 @@ def create_dirs_and_move_files(
     if not dry_run and new_history_file:
         write_one_line(history_file_path, "[\n")
 
-    created_dirs: set[Path] = set()
-    file_suffixes: set[str] = set()
-
     with progress:
         task_id = progress.add_task(
             f"{'Simulating' if dry_run else 'Organizing'} files...",
@@ -109,8 +133,6 @@ def create_dirs_and_move_files(
         )
 
         for file in all_files:
-            import time
-            # time.sleep(.2)
             file_suffixes.add(file.suffix)
 
             # Update progress with file information
@@ -160,7 +182,7 @@ def create_dirs_and_move_files(
             if not category_matched:
                 destination_dir = file_categories["defaults"]["name"]
 
-            destination_path: Path = dir_path.joinpath(destination_dir)
+            destination_path = file.parent.joinpath(destination_dir)
             target_path: Path = destination_path.joinpath(file.name)
 
             # Create directory if needed
@@ -204,7 +226,13 @@ def create_dirs_and_move_files(
                     )
                 else:
                     original_path = file.resolve()
-                    file.rename(target_path)
+
+                    try:
+                        file.rename(target_path)
+                    except OSError:
+                        # fallback: copy2 then unlink (safer across devices)
+                        shutil.copy2(original_path, target_path)
+                        original_path.unlink()
                     new_path = target_path.resolve()
 
                     logger.success(f"File moved from {original_path} to {new_path}")

@@ -56,6 +56,19 @@ def organize(
             help="Skip all confirmation prompts and proceed automatically.",
         ),
     ] = False,
+    recursive: bool = typer.Option(
+        False,
+        "--ricursive",
+        "-r",
+        help="Ricursive organizer direcory.",
+    ),
+    pattern: Annotated[
+        str,
+        typer.Option(
+            "--pattern",
+            help="Glob pattern to match files for organization. Examples: '*.jpg' for images, 'report*.*' for files starting with 'report'. Defaults to '*' (all files).",
+        ),
+    ] = "*",
 ) -> None:
     """
     Organize multiple directories simultaneously using configured categorization rules.
@@ -64,15 +77,10 @@ def organize(
     based on file extensions and size rules defined in the configuration.
 
     :param paths: Comma-separated list of directory paths to organize
-    :type paths: str
     :param include_hidden: Whether to include hidden files in the organization process
-    :type include_hidden: bool
     :param dry_run: Simulation mode without actual file operations
-    :type dry_run: bool
     :param force: Bypass security restrictions (use with caution)
-    :type force: bool
     :param skip_confirmation: Automatically proceed without user prompts
-    :type skip_confirmation: bool
     :raises typer.Exit: If no valid paths are provided or user cancels operation
     """
     organize_many_dirs(
@@ -81,4 +89,6 @@ def organize(
         dry_run=dry_run,
         force=force,
         skip_confirmation=skip_confirmation,
+        recursive=recursive,
+        pattern=pattern,
     )

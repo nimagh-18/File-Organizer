@@ -31,11 +31,11 @@ def organize_many_dirs(
     dry_run: bool,
     force: bool,
     skip_confirmation: bool,
+    recursive: bool,
+    pattern: str = "*",
 ) -> None:
     # Parse and clean input paths
     path_list: list[Path] = [Path(p.strip()) for p in paths.split(",") if p.strip()]
-
-    display_and_progress = BeautifulDisplayAndProgress()
 
     if not path_list:
         console.print(
@@ -97,8 +97,10 @@ def organize_many_dirs(
             directory_path,
             file_categories,
             dry_run=dry_run,
+            recursive=recursive,
             new_history_file=new_history_file,
             last_dir=last_dir,
+            pattern=pattern,
         )
 
         total_moved += moved
