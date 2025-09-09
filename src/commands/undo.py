@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
 from src.filesystem.dir_cleaner import remove_dirs
 from src.history.manager import get_last_history, undo_files
 
@@ -27,17 +28,11 @@ def undo() -> None:
 
     errors_count = file_errors_count + dirs_errors_count
 
-    if errors_count == 0:
-        typer.echo(
-            typer.style(
-                f"Undo completed: {moved_back_count} files moved back, {removed_dirs_count} directories removed.",
-                fg=typer.colors.GREEN,
-            )
-        )
-    else:
-        typer.echo(
-            typer.style(
-                f"Undo finished with errors: {moved_back_count} files moved back, {removed_dirs_count} directories removed, {errors_count} errors.",
-                fg=typer.colors.YELLOW,
-            )
-        )
+    display = BeautifulDisplayAndProgress()
+    display.display_final_results(
+        moved_back_count,
+        removed_dirs_count,
+        errors_count,
+        "Moved Backed Files",
+        "Directories Removed",
+    )

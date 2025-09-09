@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 import ijson
 import typer
 from loguru import logger
-from tqdm import tqdm
+from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -103,64 +103,64 @@ def undo_files(last_history_file_path: Path) -> tuple[int, int, list[Path]]:
     It uses a dynamic progress bar for efficiency.
 
     :param last_history_file_path: The path to the latest history JSON file.
-    :return: A tuple containing the count of files moved back, the number of errors
-             during file moves, and a list of Path objects for the directories to be removed.
+    :return: A tuple containing:
+             - count of files moved back,
+             - number of errors during file moves,
+             - list of Path objects for the directories to be removed.
     """
-    pbar = tqdm(
-        desc=typer.style("Undoing actions", fg=typer.colors.GREEN),
-        unit="action",
-        ncols=80,
-        total=None,
-    )
+    # Create progress bar
+    progress = BeautifulDisplayAndProgress().create_advanced_progress()
 
     moved_back_count = 0
     errors_count = 0
-    total_files = 0
-
     dirs_path: list[Path] = []
 
-    for history in stream_history_file(last_history_file_path):
-        total_files += 1
-        pbar.total = total_files  # update the total count in the progress bar
-        pbar.refresh()
+    # Load all history entries first (to set correct progress total)
+    all_history: tuple[Any, ...] = tuple(stream_history_file(last_history_file_path))
 
-        action = history.get("action")
-        status = history.get("status")
+    with progress:
+        task_id = progress.add_task("Undoing actions", total=len(all_history))
 
-        if status != "success":
-            logger.debug(f"Skipping action due to previous error: {action}")
-            continue
+        for history in all_history:
+            action = history.get("action")
+            status = history.get("status")
 
-        if action == "move_file":
-            source_path = Path(history["source"])
-            destination_path = Path(history["destination"])
-
-            if not source_path.exists():
-                logger.warning(f"File not found at source location: {source_path}")
+            if status != "success":
+                logger.debug(f"Skipping action due to previous error: {action}")
+                progress.advance(task_id)
                 continue
 
-            try:
-                # Check if the destination already exists to avoid overwriting
-                if destination_path.exists():
-                    logger.warning(
-                        f"Destination path {destination_path} already exists. Skipping move back."
-                    )
+            if action == "move_file":
+                source_path = Path(history["source"])
+                destination_path = Path(history["destination"])
+
+                if not source_path.exists():
+                    logger.warning(f"File not found at source location: {source_path}")
+                    progress.advance(task_id)
                     continue
 
-                source_path.rename(destination_path)
-                logger.success(
-                    f"File moved back from {source_path.name} to {destination_path.parent}"
-                )
-                moved_back_count += 1
-            except Exception as e:
-                logger.error(f"Error moving file back {source_path}: {e}")
-                errors_count += 1
+                try:
+                    # Check if the destination already exists to avoid overwriting
+                    if destination_path.exists():
+                        logger.warning(
+                            f"Destination path {destination_path} already exists. Skipping move back."
+                        )
+                        progress.advance(task_id)
+                        continue
 
-        elif action == "create_dir":
-            dirs_path.append(Path(history["path"]))
+                    source_path.rename(destination_path)
+                    logger.success(
+                        f"File moved back from {source_path.name} to {destination_path.parent}"
+                    )
+                    moved_back_count += 1
+                except Exception as e:
+                    logger.error(f"Error moving file back {source_path}: {e}")
+                    errors_count += 1
 
-        pbar.update(1)
+            elif action == "create_dir":
+                dirs_path.append(Path(history["path"]))
 
-    pbar.close()
+            # Advance progress after each action
+            progress.advance(task_id)
 
     return moved_back_count, errors_count, dirs_path

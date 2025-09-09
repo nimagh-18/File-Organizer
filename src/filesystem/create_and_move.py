@@ -1,13 +1,22 @@
+"""
+File organization core functionality with enhanced progress tracking.
+
+This module handles the core logic of creating directories and moving files
+based on categorization rules, featuring advanced progress visualization.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generator
 
 import typer
+from rich.console import Console
 from src.config.logging_config import log_dir, logger
+from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
 from src.history.json_writers import write_entries, write_one_line
-from tqdm import tqdm
+from src.history.manager import get_last_history
 
 if TYPE_CHECKING:
     from os import stat_result
@@ -16,15 +25,17 @@ if TYPE_CHECKING:
     from src.config.config_type_hint import FileCategories
 
 # --- Settings ---
-BATCH_SIZE = 50  # The number of items we keep in the file and cleansing before saving
+BATCH_SIZE = 50  # Number of items to keep in memory before flushing to history file
 
 
 def format_size_to_mb(size_bytes: int) -> float:
     """
-    Size in bytes to MB.
+    Convert size from bytes to megabytes.
 
-    :param size_bytes: Size in bytes.
-    :return: Size in MB.
+    :param size_bytes: Size in bytes
+    :type size_bytes: int
+    :return: Size in megabytes
+    :rtype: float
     """
     if size_bytes == 0:
         return 0
@@ -34,220 +45,218 @@ def format_size_to_mb(size_bytes: int) -> float:
 def create_dirs_and_move_files(
     dir_path: Path,
     file_categories: FileCategories,
+    *,
     dry_run: bool,
-) -> None:
+    new_history_file: bool = True,
+    last_dir: bool = True,
+) -> tuple[int, int, int]:
     """
-    Organizes files in a given directory by moving them into subdirectories
-    based on their file extensions.
+    Organize files in a directory by moving them into categorized subdirectories.
 
-    It creates new directories for each category (e.g., 'Images', 'Documents')
-    if they don't exist. Files without a matching category are moved_files_count to a
-    specific 'Other' directory.
+    Creates directories for each file category and moves files based on their
+    extensions and size-based variants. Supports dry-run mode for simulation.
 
-    :param dir_path: The path of the directory to be organized.
-    :param uncategorized_dir: The Path object for the directory where
-                              uncategorized files will be moved_files_count.
-    :param file_categories: A dictionary mapping file extensions (keys)
-                            to category names (values).
-    :param dry_run: If True, simulates the organization process without
-                    making any changes to the file system.
+    :param dir_path: Path of the directory to be organized
+    :type dir_path: Path
+    :param file_categories: Dictionary containing file categorization rules
+    :type file_categories: FileCategories
+    :param dry_run: If True, simulates the process without making changes
+    :type dry_run: bool
+    :raises typer.Exit: If category variant configuration is invalid
     """
+    console = Console()
+
     created_dir_count = 0
     moved_files_count = 0
-    errors = 0
+    errors_count = 0
 
     batch_entries: list[
         dict[str, str]
-    ] = []  # List to store structured log entries for undo
+    ] = []  # Structured log entries for undo functionality
 
-    # Use a different color and description for dry_run
-    pbar_color = typer.colors.CYAN if dry_run else typer.colors.GREEN
-    pbar_desc = "Simulating actions" if dry_run else "Performing actions"
-    pbar = tqdm(
-        desc=typer.style(pbar_desc, fg=pbar_color),
-        unit="action",
-        ncols=80,
-        total=None,
-    )
+    all_files: Generator[Path, None, None] = (f for f in dir_path.iterdir() if f.is_file())
 
-    all_files = (f for f in dir_path.iterdir() if f.is_file())
-    total_files = 0
-    first_entry = True
+    if not all_files:
+        console.print("[yellow]No files found to organize![/yellow]")
+        return
 
-    history_file_path: Path = log_dir.joinpath(
-        f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-    )
+    # Create instance without total_files -> auto-counting enabled
+    display = BeautifulDisplayAndProgress()
 
-    if not dry_run:
+    # Create progress bar
+    progress = display.create_advanced_progress()
+
+
+    if new_history_file:
+        first_entry = True
+        history_file_path: Path = log_dir.joinpath(
+            f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        )
+    else:
+        first_entry = True
+        history_file_path = get_last_history()
+
+    if not dry_run and new_history_file:
         write_one_line(history_file_path, "[\n")
 
     created_dirs: set[Path] = set()
-
     file_suffixes: set[str] = set()
 
-    for file in all_files:
-        total_files += 1
-        pbar.total = total_files
-        pbar.refresh()
+    with progress:
+        task_id = progress.add_task(
+            f"{'Simulating' if dry_run else 'Organizing'} files...",
+            total=None,
+        )
 
-        file_suffixes.add(file.suffix)
+        for file in all_files:
+            import time
+            # time.sleep(.2)
+            file_suffixes.add(file.suffix)
 
-        file_stat_info: stat_result = file.stat()
-        file_size: float = format_size_to_mb(file_stat_info.st_size)
+            # Update progress with file information
+            action = "📁 Moving" if not dry_run else "👀 Would move"
+            display.display_file_info(
+                progress,
+                task_id,
+                file,
+                action,
+            )
 
-        mod_time_timestamp: float = file_stat_info.st_mtime
-        mod_time: datetime = datetime.fromtimestamp(mod_time_timestamp)
+            file_stat_info: stat_result = file.stat()
+            file_size: float = format_size_to_mb(file_stat_info.st_size)
+            mod_time: datetime = datetime.fromtimestamp(file_stat_info.st_mtime)
 
-        destination_dir: str = ""
+            destination_dir: str = ""
+            category_matched = False
 
-        for category in file_categories["categories"]:
-            if file.suffix in category.get("extensions", []):
-                for variant in category.get("variants", []):
-                    dir_min_size = variant.get("min_size_mb", 0)
-                    dir_max_size = variant.get("max_size_mb", float("inf"))
+            # Find matching category for the file
+            for category in file_categories["categories"]:
+                if file.suffix in category.get("extensions", []):
+                    # Check size variants if they exist
+                    for variant in category.get("variants", []):
+                        dir_min_size = variant.get("min_size_mb", 0)
+                        dir_max_size = variant.get("max_size_mb", float("inf"))
 
-                    if file_size >= dir_min_size and file_size < dir_max_size:
-                        if "name" not in variant:
-                            typer.echo(
-                                typer.style(
-                                    "You'r filecategories variant has no name!!!",
-                                    fg=typer.colors.GREEN,
+                        if file_size >= dir_min_size and file_size < dir_max_size:
+                            if "name" not in variant:
+                                console.print(
+                                    "[red]Error: Category variant missing name in configuration![/red]"
                                 )
-                            )
-                            raise typer.Exit(1)
-                        destination_dir += variant["name"] + "-"
-                        break
+                                raise typer.Exit(1)
+                            destination_dir += variant["name"] + "-"
+                            break
 
-                destination_dir += category["name"]
+                    destination_dir += category["name"]
+                    category_matched = True
 
-                # If we reach here, the file matches the category
-                logger.info(
-                    f"File {file.name} matches category '{category}' with size {file_size:.2f} MB and modified on {mod_time}."
-                )
-                pbar.write(
-                    typer.style(
-                        f"📄 Moving: {file.name} to {destination_dir} directory",
-                        fg=typer.colors.BLUE,
+                    logger.info(
+                        f"File {file.name} matches category '{category}' with size {file_size:.2f} MB"
                     )
-                )
+                    # progress.console.print(
+                    #     f"[blue]📄 Moving: {file.name} to {destination_dir} directory[/blue]"
+                    # )
+                    break
 
-                break
-        else:
-            destination_dir = file_categories["defaults"]["name"]
+            if not category_matched:
+                destination_dir = file_categories["defaults"]["name"]
 
-        destination_path: Path = dir_path.joinpath(destination_dir)
+            destination_path: Path = dir_path.joinpath(destination_dir)
+            target_path: Path = destination_path.joinpath(file.name)
 
-        target_path: Path = destination_path.joinpath(file.name)
-
-        # Create directory only once
-        if (destination_path not in created_dirs) and (not destination_path.exists()):
-            if dry_run:
-                pbar.write(
-                    typer.style(
-                        f"📦 Would create directory: {destination_path.name}",
-                        fg=typer.colors.BLUE,
+            # Create directory if needed
+            if (destination_path not in created_dirs) and (
+                not destination_path.exists()
+            ):
+                if dry_run:
+                    progress.console.print(
+                        f"[blue]📦 Would create directory: {destination_path.name}[/blue]"
                     )
-                )
-            else:
-                destination_path.mkdir(exist_ok=True)
-                logger.info(f"Directory created: {destination_path}")
+                else:
+                    destination_path.mkdir(exist_ok=True)
+                    logger.info(f"Directory created: {destination_path}")
 
-            created_dirs.add(destination_path)
-            created_dir_count += 1
+                created_dirs.add(destination_path)
+                created_dir_count += 1
 
-            if not dry_run:
-                batch_entries.append(
-                    {
-                        "timestamp": str(datetime.now()),
-                        "action": "create_dir",
-                        "path": str(destination_path),
-                        "status": "success",
-                    }
-                )
-
-        try:
-            # Preventing file overwrite
-            counter = 1
-            while target_path.exists():
-                target_path = destination_path.joinpath(
-                    f"{file.stem}_{counter}{file.suffix}",
-                )
-                counter += 1
-
-            # Save original path before moving
-            original_path = file.resolve()
-            new_path = target_path.resolve()
-
-            # Move file to destination_dir
-            if dry_run:
-                pbar.write(
-                    typer.style(
-                        f"📄 Would move: {file.name} -> {destination_path.name}",
-                        fg=typer.colors.BLUE,
+                if not dry_run:
+                    batch_entries.append(
+                        {
+                            "timestamp": str(datetime.now()),
+                            "action": "create_dir",
+                            "path": str(destination_path),
+                            "status": "success",
+                        }
                     )
-                )
-            else:
-                file.rename(target_path)
-                logger.success(f"File moved_files_count from {original_path} to {new_path}")
-                batch_entries.append(
-                    {
-                        "timestamp": str(datetime.now()),
-                        "action": "move_file",
-                        "source": str(new_path),
-                        "destination": str(original_path),
-                        "original_name": file.name,
-                        "status": "success",
-                    }
-                )
 
-            moved_files_count += 1
-
-        except Exception as e:
-            if dry_run:
-                pbar.write(
-                    typer.style(
-                        f"❌ Would have failed to move file {file.name}: {e}",
-                        fg=typer.colors.RED,
+            try:
+                # Prevent file overwrite with counter suffix
+                counter = 1
+                while target_path.exists():
+                    target_path = destination_path.joinpath(
+                        f"{file.stem}_{counter}{file.suffix}",
                     )
-                )
-            else:
-                logger.error(f"Error moving file {file.name}: {e}")
-            errors += 1
+                    counter += 1
 
-        if len(batch_entries) >= BATCH_SIZE and not dry_run:
-            write_entries(history_file_path, batch_entries, first_entry)
-            first_entry = False
+                # Move file to destination
+                if dry_run:
+                    progress.console.print(
+                        f"[blue]📄 Would move: {file.name} -> {destination_path.name}[/blue]"
+                    )
+                else:
+                    original_path = file.resolve()
+                    file.rename(target_path)
+                    new_path = target_path.resolve()
 
-        pbar.update(1)
+                    logger.success(f"File moved from {original_path} to {new_path}")
+                    batch_entries.append(
+                        {
+                            "timestamp": str(datetime.now()),
+                            "action": "move_file",
+                            "source": str(new_path),
+                            "destination": str(original_path),
+                            "original_name": file.name,
+                            "status": "success",
+                        }
+                    )
 
-    pbar.close()
+                moved_files_count += 1
 
+            except Exception as e:
+                error_msg = f"Error processing file {file.name}: {e}"
+                if dry_run:
+                    progress.console.print(
+                        f"[red]❌ Would have failed: {error_msg}[/red]"
+                    )
+                else:
+                    logger.error(error_msg)
+                errors_count += 1
+
+            # Flush batch entries to history file
+            if len(batch_entries) >= BATCH_SIZE and not dry_run:
+                write_entries(history_file_path, batch_entries, first_entry)
+                first_entry = False
+                batch_entries.clear()
+
+            # progress.update(task_id, advance=1)
+            progress.advance(task_id)
+
+    display.display_organization_stats(file_categories)
+
+    # Final flush of remaining batch entries
     if batch_entries and not dry_run:
         write_entries(history_file_path, batch_entries, first_entry)
-        write_one_line(history_file_path, "\n]")
 
-    # Final summary with a clear distinction for dry_run
-    if dry_run:
-        typer.echo(
-            typer.style(
-                f"\n[Dry Run]: Would have created {created_dir_count} directories: {sorted([d.name for d in created_dirs])}\n"
-                f"           Would have moved_files_count {moved_files_count} files with the following suffixes: {sorted(file_suffixes)}\n"
-                f"           and encountered {errors} potential errors.",
-                fg=typer.colors.CYAN,
-            )
-        )
-    else:
-        if errors == 0:
-            typer.echo(
-                typer.style(
-                    f"\nDone: {created_dir_count} directory created, {moved_files_count} files moved_files_count, {errors} errors.",
-                    fg=typer.colors.GREEN,
-                )
-            )
+        if last_dir:
+            write_one_line(history_file_path, "\n]")
         else:
-            typer.echo(
-                typer.style(
-                    f"\nDone: {created_dir_count} directory created, {moved_files_count} files moved_files_count, {errors} errors.",
-                    fg=typer.colors.YELLOW,
-                )
-            )
+            write_one_line(history_file_path, ",\n")
+
+    # # Display final results
+    # console.print("\n" + "=" * 60)
+    # _display_final_results(moved_files_count, created_dir_count, errors_count, dry_run)
+
+    if dry_run:
+        console.print(f"[cyan]File suffixes processed: {sorted(file_suffixes)}[/cyan]")
+    console.print("=" * 60)
+
+    return moved_files_count, created_dir_count, errors_count
