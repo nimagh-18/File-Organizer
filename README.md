@@ -1,21 +1,28 @@
 # File Organizer
 
-A powerful, modular, and efficient command-line tool for organizing files into categorized directories based on their type. Includes robust undo functionality, customizable configuration, and detailed logging.
+A powerful, modular, and efficient command-line tool for organizing files into categorized directories based on file extensions, size variants, and custom rules. Features robust undo functionality, customizable configuration, and advanced progress visualization with Rich.
 
 ## Features
 
-- **File Organization**: Automatically moves files into categorized folders (e.g., Images, Documents, Videos) based on file extensions defined in `config.json`.
-- **Undo Functionality**: Reverts the last organization operation, restoring files and directories to their previous state.
-- **Customizable Configuration**: Easily edit file categories and rules via `config.json` using a built-in editor command.
-- **Comprehensive Logging**: All operations are logged for transparency and troubleshooting.
-- **Progress Bars**: Uses `tqdm` for dynamic progress bars during file operations.
-- **Efficient Memory Usage**: Handles large directories efficiently with streaming and batching.
-- **System Protection**: Prevents organizing sensitive or system directories.
-- **Command-Line Interface**: Built with Typer for a modern CLI experience.
+- **File Organization**: Automatically moves files into categorized folders (e.g., Images, Documents, Videos) based on rules defined in `file_categories.yaml`.
+- **Recursive Organization**: Supports recursive traversal of subdirectories with the `--recursive` flag, with optional depth limiting via `--depth`.
+- **Pattern Filtering**: Filter files using glob patterns (e.g., `*.jpg`, `report*.*`) with comprehensive validation for invalid patterns.
+- **Undo Functionality**: Reverts the last organization operation, restoring files and directories using a JSON history file with efficient streaming (via `ijson`).
+- **Customizable Configuration**: Edit file categories, extensions, and size-based variants interactively or via `file_categories.yaml`.
+- **Advanced Progress Visualization**: Uses Rich for beautiful progress bars, file statistics, and final summaries.
+- **Comprehensive Logging**: Logs all operations with Loguru, including rotation and compression for scalability.
+- **System Protection**: Prevents organizing sensitive system directories using an allowlist (`allowed_path.yaml`).
+- **Performance Optimization**: Uses caching (`suffix_to_category_mapping`) and set-based extensions for faster processing.
+- **Modern CLI**: Built with Typer for a user-friendly command-line interface with detailed help messages.
+- **Editable Installation**: Install as a standalone CLI tool (`organizer`) using `uv` or `pip`.
+- **Depth-Limited Traversal**: Limit recursive processing to specific subdirectory levels (e.g., `--depth 2`).
+- **Dry-Run Mode**: Preview changes without modifying files using `--dry-run`.
+- **Hidden File Support**: Include hidden files with `--include-hidden`.
+- **Sphinx Documentation**: Comprehensive docstrings for developer-friendly documentation.
 
 ## Before & After Example
 
-Suppose you have a folder with mixed files:
+### Without Recursive Mode
 
 **Before running File Organizer:**
 
@@ -28,9 +35,18 @@ your-folder/
 ├── notes.txt
 ├── video1.mp4
 ├── random.zip
+├── subfolder/
+│   ├── photo2.jpg
+│   └── doc2.pdf
 ```
 
-**After running File Organizer:**
+**Command:**
+
+```bash
+organizer organize /path/to/your-folder
+```
+
+**After running File Organizer (non-recursive):**
 
 ```
 your-folder/
@@ -47,118 +63,189 @@ your-folder/
 │   └── video1.mp4
 ├── Archives/
 │   └── random.zip
+├── subfolder/  # Unchanged
+│   ├── photo2.jpg
+│   └── doc2.pdf
+```
+
+### With Recursive Mode and Depth Limit
+
+**Before running File Organizer:**
+
+```
+your-folder/
+├── photo1.jpg
+├── doc1.pdf
+├── subfolder/
+│   ├── photo2.jpg
+│   ├── doc2.pdf
+│   └── deep/
+│       ├── video2.mp4
+│       └── nested/
+│           └── song2.mp3
+```
+
+**Command:**
+
+```bash
+organizer organize /path/to/your-folder --recursive --depth 2
+```
+
+**After running File Organizer (recursive, depth=2):**
+
+```
+your-folder/
+├── Images/
+│   ├── photo1.jpg
+│   └── photo2.jpg
+├── Documents/
+│   └── doc2.pdf
+├── Videos/
+│   └── video2.mp4
+├── subfolder/
+│   └── deep/
+│       └── nested/  # Unchanged (beyond depth 2)
+│           └── song2.mp3
 ```
 
 ## Installation
 
-To set up this project, use the `uv` package manager.
+Use the `uv` package manager for a seamless setup.
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/nimagh-18/File-Organizer.git
    cd File-Organizer
    ```
 
 2. **Create and activate a virtual environment:**
+
    ```bash
    uv venv
    source .venv/bin/activate
    ```
 
-3. **Install dependencies:**
+3. **Install the project as an editable package:**
+
    ```bash
-   uv sync
+   uv tool install -e .
    ```
+
+   This installs the `organizer` CLI command globally in the virtual environment.
 
 ## Usage
 
-All commands are available via the CLI. Run the main entry point:
+Run commands via the `organizer` CLI:
 
 ```bash
-python cli.py [COMMAND] [OPTIONS]
+organizer [COMMAND] [OPTIONS]
 ```
 
 ### Organize Files
 
-Organize files in a directory:
+Organize files in one or more directories:
 
 ```bash
-python cli.py organize "/path/to/your/files"
+organizer organize /path/to/dir1,/path/to/dir2 --recursive --depth 2 --pattern "*.{jpg,png}"
 ```
-- Add `--include-hidden` to include hidden/system files.
+
+- Options:
+  - `--recursive` (`-r`): Organize subdirectories.
+  - `--depth <int>`: Limit recursion depth (e.g., `2` for two levels; `-1` for unlimited).
+  - `--pattern <glob>`: Filter files (e.g., `*.jpg`, `report*.*`).
+  - `--include-hidden`: Include hidden files.
+  - `--dry-run`: Simulate without changes.
+  - `--force` (`-f`): Bypass security checks.
+  - `--yes` (`-y`): Skip confirmation prompts.
 
 ### Undo Last Operation
 
 Revert the last organization:
 
 ```bash
-python cli.py undo
+organizer undo
 ```
 
 ### Show Current Configuration
 
-Display the current file categorization rules:
+Display the current categorization rules:
 
 ```bash
-python cli.py show-config
+organizer show-config
 ```
 
 ### Edit Configuration
 
-Open `config.json` in your system's default text editor:
+Edit `file_categories.yaml` interactively or in the default editor:
 
 ```bash
-python cli.py edit-config
+organizer edit-config
+```
+
+### Add Allowed Path
+
+Add a directory to the allowlist for organization:
+
+```bash
+organizer add-path /path/to/dir
 ```
 
 ## Configuration
 
-File categorization is managed in `config.json`. Each key is a file extension, and the value is the target directory name.
+File categorization is managed in `src/file_organizer/config/file_categories.yaml`. Example:
 
-Example:
-
-```json
-{
-    ".jpg": "Images",
-    ".pdf": "Documents",
-    ".mp4": "Videos"
-}
+```yaml
+defaults:
+  name: Other
+categories:
+  - name: Images
+    extensions: [".jpg", ".png"]
+    variants:
+      - name: Small
+        min_size_mb: 0
+        max_size_mb: 5
+      - name: Large
+        min_size_mb: 5
+  - name: Documents
+    extensions: [".pdf", ".txt"]
 ```
-You can edit this file directly or use the `edit-config` command.
+
+Edit directly or use `organizer edit-config` for an interactive experience.
 
 ## Logging & Undo
 
-- All operations are logged in the `src/logs/` directory.
-- Undo uses the latest log to restore files and remove created directories.
+- **Logs**: Stored in `src/file_organizer/logs/` with rotation and compression (via Loguru).
+- **Undo**: Uses JSON history files for efficient streaming (via `ijson`) to restore files.
 
 ## System Protection
 
-The tool will not allow organizing system or sensitive directories (e.g., `/`, `/etc`, user home, `.config`, etc.) for safety.
+The tool uses an allowlist (`allowed_path.yaml`) to prevent organizing sensitive directories (e.g., `/`, `/etc`, `~/.config`).
 
 ## Dependencies
 
-- [Typer](https://typer.tiangolo.com/)
-- [Tqdm](https://tqdm.github.io/)
-- [Loguru](https://github.com/Delgan/loguru)
-- [ijson](https://pypi.org/project/ijson/)
+- [Typer](https://typer.tiangolo.com/) for CLI
+- [Rich](https://github.com/Textualize/rich) for progress visualization
+- [Loguru](https://github.com/Delgan/loguru) for logging
+- [ijson](https://pypi.org/project/ijson/) for JSON streaming
+- [PyYAML](https://pyyaml.org/) for configuration
+- [tqdm](https://tqdm.github.io/) for fallback progress bars
 
 ## Roadmap
 
 Planned features for future releases:
-- Multi-directory input support
-- Advanced pattern/rule-based categorization (regex, size, date, etc.)
-- Dry-run mode for previewing changes
-- Multi-level undo/history
-- Parallel/multi-threaded processing
-- HTML/Markdown operation reports
-- Real-time folder watch mode
-- AI-based file type detection
-
-See `needed_features.txt` for more details.
+- Regex-based file filtering (`--regex`)
+- File deduplication using hashes
+- Real-time folder watch mode (e.g., with `watchgod`)
+- Multi-level undo history
+- Parallel processing for large directories
+- Export operation reports to CSV/HTML
+- Cloud storage integration (e.g., Google Drive, Dropbox)
+- AI-based file categorization
 
 ## Contributing
 
-Contributions are welcome! Please open issues or submit pull requests.
+Contributions are welcome! Please open issues or submit pull requests on [GitHub](https://github.com/nimagh-18/File-Organizer).
 
 ## License
 
