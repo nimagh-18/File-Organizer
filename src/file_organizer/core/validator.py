@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING
 
 import typer
 from loguru import logger
-from src.config.utils import load_config
-from src.core.constants import SystemProtector
+
+from file_organizer.config.utils import load_config
+from file_organizer.core.constants import SystemProtector
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -26,14 +27,15 @@ def validate_directory_access(path: Path, force: bool) -> bool:
     # Check for force flag first
     if force:
         logger.warning(
-            f"Bypassing security checks for path '{path}' due to --force flag."
+            f"Bypassing security checks for path '{path}' due to --force flag.",
         )
         return True
 
     if not path.exists():
         typer.echo(
             typer.style(
-                f"Error: The path '{path}' does not exist.", fg=typer.colors.RED
+                f"Error: The path '{path}' does not exist.",
+                fg=typer.colors.RED,
             )
         )
         return False
@@ -41,7 +43,8 @@ def validate_directory_access(path: Path, force: bool) -> bool:
     if not path.is_dir():
         typer.echo(
             typer.style(
-                f"Error: The path '{path}' is not a directory.", fg=typer.colors.RED
+                f"Error: The path '{path}' is not a directory.",
+                fg=typer.colors.RED,
             )
         )
         return False

@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional
 
+from file_organizer.config.config_type_hint import FileCategories
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import (
@@ -13,7 +16,6 @@ from rich.progress import (
 )
 from rich.table import Table
 from rich.text import Text
-from src.config.config_type_hint import FileCategories
 
 
 class BeautifulDisplayAndProgress:
@@ -31,7 +33,7 @@ class BeautifulDisplayAndProgress:
     a file is processed.
     """
 
-    def __init__(self, total_files: Optional[int] = None) -> None:
+    def __init__(self, total_files: int | None = None) -> None:
         """
         Initialize the display utility.
 
@@ -173,11 +175,10 @@ class BeautifulDisplayAndProgress:
         prefix = "Would have" if dry_run else ""
 
         results_table.add_row(f"{prefix} {moved_text}", f"[bold]{moved_count}[/bold]")
+        results_table.add_row(f"{prefix} {dirs_text}", f"[bold]{dirs_count}[/bold]")
         results_table.add_row(
-            f"{prefix} {dirs_text}", f"[bold]{dirs_count}[/bold]"
-        )
-        results_table.add_row(
-            f"{error_text}", f"[red]{error_count}[/red]" if error_count else "[green]0[/green]"
+            f"{error_text}",
+            f"[red]{error_count}[/red]" if error_count else "[green]0[/green]",
         )
 
         title = "📋 Dry Run Results" if dry_run else "✅ Organization Complete"

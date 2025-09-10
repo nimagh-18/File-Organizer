@@ -3,9 +3,11 @@ import platform
 from functools import lru_cache
 from pathlib import Path
 
+from file_organizer.config.config_type_hint import DefaultPaths
+
 
 class SystemProtector:
-    def __init__(self, allowed_paths_config) -> None:
+    def __init__(self, allowed_paths_config: DefaultPaths) -> None:
         system = platform.system().lower()
 
         if system == "linux":

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 import typer
-from src.config.edit_allowed_path import add_allowed_path_to_config
+from file_organizer.config.edit_allowed_path import add_allowed_path_to_config
 
 app = typer.Typer()
 
@@ -11,7 +11,8 @@ app = typer.Typer()
 @app.command()
 def add_path(
     path: Annotated[
-        str, typer.Argument(help="Path of the directory to add in allowed_paths")
+        str,
+        typer.Argument(help="Path of the directory to add in allowed_paths"),
     ],
 ) -> None:
     """

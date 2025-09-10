@@ -4,12 +4,13 @@ from typing import TYPE_CHECKING
 
 import typer
 import yaml
-from src.config.optimize_config import optimize_config
+
+from file_organizer.config.optimize_config import optimize_config
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.config.config_type_hint import (
+    from file_organizer.config.config_type_hint import (
         DefaultPaths,
         FileAndPathConfig,
         FileCategories,
@@ -20,7 +21,7 @@ def read_config(
     file_path: Path,
     /,
     *,
-    optimization: bool = True,
+    optimization: bool = False,
 ) -> FileCategories | DefaultPaths | FileAndPathConfig:
     """
     Reads a configuration file and returns its content as a dictionary.
@@ -32,10 +33,12 @@ def read_config(
     :raises yaml.YAMLError: If there is an error parsing the YAML file.
     :return: A dictionary containing the configuration data.
     """
+    print(file_path)
     if not file_path.exists():
         typer.echo(
             typer.style(
-                f"Configuration file {file_path} does not exist.", fg=typer.colors.RED
+                f"Configuration file {file_path} does not exist.",
+                fg=typer.colors.RED,
             )
         )
         raise typer.Exit(1)
@@ -49,7 +52,7 @@ def read_config(
 
         except yaml.YAMLError as e:
             typer.echo(
-                typer.style(f"Error reading YAML file: {e}", fg=typer.colors.RED)
+                typer.style(f"Error reading YAML file: {e}", fg=typer.colors.RED),
             )
             raise typer.Exit(1)
         else:

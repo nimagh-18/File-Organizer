@@ -1,5 +1,6 @@
 import typer
-from src.commands import add_path, edit_config, organize, show_config, undo
+
+from file_organizer.commands import add_path, edit_config, organize, show_config, undo
 
 app = typer.Typer()
 

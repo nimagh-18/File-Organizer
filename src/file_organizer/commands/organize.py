@@ -12,7 +12,8 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
-from src.core.organize_many_dirs import organize_many_dirs
+
+from file_organizer.core.organize_many_dirs import organize_many_dirs
 
 app = typer.Typer()
 console = Console()
@@ -69,6 +70,13 @@ def organize(
             help="Glob pattern to match files for organization. Examples: '*.jpg' for images, 'report*.*' for files starting with 'report'. Defaults to '*' (all files).",
         ),
     ] = "*",
+    iteration_depth: Annotated[
+        int,
+        typer.Option(
+            "--depth",
+            help="Iteration depth.",
+        ),
+    ] = -1,
 ) -> None:
     """
     Organize multiple directories simultaneously using configured categorization rules.
@@ -81,6 +89,7 @@ def organize(
     :param dry_run: Simulation mode without actual file operations
     :param force: Bypass security restrictions (use with caution)
     :param skip_confirmation: Automatically proceed without user prompts
+    :param iteration_depth: Maximum recursion depth (e.g., 2 for two subdirectory levels). Use -1 for unlimited.
     :raises typer.Exit: If no valid paths are provided or user cancels operation
     """
     organize_many_dirs(
@@ -91,4 +100,5 @@ def organize(
         skip_confirmation=skip_confirmation,
         recursive=recursive,
         pattern=pattern,
+        iteration_depth=iteration_depth,
     )

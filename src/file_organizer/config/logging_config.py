@@ -4,15 +4,13 @@ import sys
 from pathlib import Path
 
 from loguru import logger
-from src.core.utils import find_project_root
+
+from file_organizer.config.file_allowed_logs_config_path import log_dir
 
 # --- Config logur ---
 # Remove default handlers to start with a clean slate
 logger.remove()
 
-# Configure Loguru to write to a log file
-project_root: Path = find_project_root(Path(__file__))
-log_dir: Path = project_root.joinpath("src/logs")
 
 log_dir.mkdir(exist_ok=True)
 log_path: Path = log_dir.joinpath("organizer.log")

@@ -11,21 +11,30 @@ import shutil
 from datetime import datetime
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
 import typer
-from rich.console import Console
-from src.config.logging_config import log_dir, logger
-from src.core.validator import validate_glob_pattern
-from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
-from src.history.json_writers import write_entries, write_one_line
-from src.history.manager import get_last_history
+
+from file_organizer.config.logging_config import log_dir, logger
+from file_organizer.core.validator import validate_glob_pattern
+from file_organizer.filesystem.beautiful_display_and_progress import (
+    BeautifulDisplayAndProgress,
+)
+from file_organizer.history.json_writers import write_entries, write_one_line
+from file_organizer.history.manager import get_last_history
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
     from os import stat_result
     from pathlib import Path
 
-    from src.config.config_type_hint import FileCategories
+    from rich.progress import Progress
+
+    from file_organizer.config.config_type_hint import FileCategories
+
+import rich
+
+console = rich.console.Console()
 
 # --- Settings ---
 BATCH_SIZE = 50  # Number of items to keep in memory before flushing to history file
@@ -53,36 +62,40 @@ def create_dirs_and_move_files(
     recursive: bool,
     new_history_file: bool = True,
     last_dir: bool = True,
-    pattern: str,
+    pattern: str = "*",
+    include_hidden: bool = False,
+    iteration_depth: int,
 ) -> tuple[int, int, int]:
     """
     Organize files in a directory by moving them into categorized subdirectories.
 
     Creates directories for each file category and moves files based on their
-    extensions and size-based variants. Supports dry-run mode for simulation.
+    extensions and size-based variants. Uses a suffix-to-category mapping to cache
+    category lookups for performance optimization, accounting for size variants.
+    Supports dry-run mode, recursive traversal, glob pattern filtering, and hidden file inclusion.
 
-    :param dir_path: Path of the directory to be organized
-    :type dir_path: Path
-    :param file_categories: Dictionary containing file categorization rules
-    :type file_categories: FileCategories
-    :param dry_run: If True, simulates the process without making changes
-    :type dry_run: bool
-    :raises typer.Exit: If category variant configuration is invalid
+    :param dir_path: Path of the directory to be organized.
+    :param file_categories: Dictionary containing file categorization rules.
+    :param dry_run: If True, simulates the process without making changes.
+    :param recursive: If True, organizes files in subdirectories recursively.
+    :param new_history_file: If True, creates a new history file for undo functionality.
+    :param last_dir: If True, closes the history file JSON array.
+    :param pattern: Glob pattern to match files (e.g., "*.txt", "*.{jpg,png}").
+    :param include_hidden: If True, includes hidden files (starting with '.').
+    :returns: Tuple of (moved_files_count, created_dir_count, errors_count).
+    :raises typer.Exit: If category variant configuration or pattern is invalid.
     """
+    # Validate glob pattern before processing
     validate_glob_pattern(pattern)
-
-    console = Console()
 
     created_dir_count = 0
     moved_files_count = 0
     errors_count = 0
-
+    batch_entries: list[dict[str, str]] = []
     created_dirs: set[Path] = set()
     file_suffixes: set[str] = set()
-
-    batch_entries: list[
-        dict[str, str]
-    ] = []  # Structured log entries for undo functionality
+    # Cache mapping: (suffix, min_size_mb, max_size_mb) -> destination_dir
+    suffix_to_category_mapping: dict[tuple[str, int, float], str] = {}
 
     file_iteration_methods = {
         "recursive": dir_path.rglob,
@@ -97,22 +110,29 @@ def create_dirs_and_move_files(
             else file_iteration_methods["not_recursive"](pattern)
         )
         if f.is_file()
+        and (include_hidden or not f.name.startswith("."))
         and not any(f.is_relative_to(created_dir) for created_dir in created_dirs)
+        and (
+            iteration_depth < 0
+            or (len(f.parents) - len(dir_path.parents) - 1) <= iteration_depth
+        )
     )
 
     try:
         first: Path = next(it)
     except StopIteration:
-        console.print("[red]No files found to organize![/red]")
+        console.print(
+            f"[yellow]No files found matching pattern '{pattern}' in {dir_path}.[/yellow]"
+        )
         return 0, 0, 0
     else:
-        all_files = chain([first], it)
+        all_files: chain[Path] = chain([first], it)
 
     # Create instance without total_files -> auto-counting enabled
     display = BeautifulDisplayAndProgress()
 
     # Create progress bar
-    progress = display.create_advanced_progress()
+    progress: Progress = display.create_advanced_progress()
 
     if new_history_file:
         first_entry = True
@@ -146,15 +166,25 @@ def create_dirs_and_move_files(
 
             file_stat_info: stat_result = file.stat()
             file_size: float = format_size_to_mb(file_stat_info.st_size)
-            mod_time: datetime = datetime.fromtimestamp(file_stat_info.st_mtime)
 
-            destination_dir: str = ""
-            category_matched = False
+            # Check cache for destination directory
+            destination_dir = ""
+            for (
+                suffix,
+                min_size,
+                max_size,
+            ), cached_dir in suffix_to_category_mapping.items():
+                if suffix == file.suffix and min_size <= file_size < max_size:
+                    destination_dir = cached_dir
+                    break
 
-            # Find matching category for the file
-            for category in file_categories["categories"]:
-                if file.suffix in category.get("extensions", []):
-                    # Check size variants if they exist
+            dir_min_size, dir_max_size = 0, float("inf")
+
+            if not destination_dir:
+                category_matched = False
+                for category in file_categories["categories"]:
+                    if file.suffix not in category.get("extensions", []):
+                        continue
                     for variant in category.get("variants", []):
                         dir_min_size = variant.get("min_size_mb", 0)
                         dir_max_size = variant.get("max_size_mb", float("inf"))
@@ -172,15 +202,17 @@ def create_dirs_and_move_files(
                     category_matched = True
 
                     logger.info(
-                        f"File {file.name} matches category '{category}' with size {file_size:.2f} MB"
+                        f"File {file.name} matches category '{category['name']}' with size {file_size:.2f} MB"
                     )
-                    # progress.console.print(
-                    #     f"[blue]📄 Moving: {file.name} to {destination_dir} directory[/blue]"
-                    # )
                     break
 
-            if not category_matched:
-                destination_dir = file_categories["defaults"]["name"]
+                if not category_matched:
+                    destination_dir = file_categories["defaults"]["name"]
+
+                # Cache the result
+                suffix_to_category_mapping[
+                    (file.suffix, dir_min_size, dir_max_size)
+                ] = destination_dir
 
             destination_path = file.parent.joinpath(destination_dir)
             target_path: Path = destination_path.joinpath(file.name)
@@ -278,10 +310,6 @@ def create_dirs_and_move_files(
             write_one_line(history_file_path, "\n]")
         else:
             write_one_line(history_file_path, ",\n")
-
-    # # Display final results
-    # console.print("\n" + "=" * 60)
-    # _display_final_results(moved_files_count, created_dir_count, errors_count, dry_run)
 
     if dry_run:
         console.print(f"[cyan]File suffixes processed: {sorted(file_suffixes)}[/cyan]")

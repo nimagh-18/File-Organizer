@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import typer
 
 if TYPE_CHECKING:
-    from src.config.config_type_hint import (
+    from file_organizer.config.config_type_hint import (
         FileCategories,
     )
 

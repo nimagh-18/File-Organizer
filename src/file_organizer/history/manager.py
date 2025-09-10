@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, Any
 import ijson
 import typer
 from loguru import logger
-from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
+
+from file_organizer.config.file_allowed_logs_config_path import log_dir
+from file_organizer.filesystem.beautiful_display_and_progress import (
+    BeautifulDisplayAndProgress,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -33,17 +37,15 @@ def get_last_history() -> Path:
 
     :return: The Path object of the most recent history file.
     """
-    logs_dir_path = Path("src/logs")
-
     histories_date_and_time: list[datetime] = []
 
     # Check if the logs directory exists
-    if not logs_dir_path.exists():
+    if not log_dir.exists():
         logger.error("Logs directory does not exist.")
         typer.echo(typer.style("Logs directory does not exist.", fg=typer.colors.RED))
         raise typer.Exit(1)
 
-    for file in logs_dir_path.iterdir():
+    for file in log_dir.iterdir():
         if file.suffix != ".json":
             continue
 
@@ -67,7 +69,7 @@ def get_last_history() -> Path:
     )
 
     # Absolute path of the last history file
-    last_history_file_path: Path = logs_dir_path.joinpath(
+    last_history_file_path: Path = log_dir.joinpath(
         f"history_{history_file_date_and_time}.json",
     ).resolve()
 

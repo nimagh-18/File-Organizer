@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import typer
-from src.config.logging_config import logger
+from file_organizer.config.logging_config import logger
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 
 import typer
-from src.core.validator import load_config
+
+from file_organizer.core.validator import load_config
 
 app = typer.Typer()
 

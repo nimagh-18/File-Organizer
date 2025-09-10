@@ -6,21 +6,22 @@ from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
 import typer
-from src.config.config_validator import validate_file_categories
-from src.config.utils import (
+
+from file_organizer.config.config_validator import validate_file_categories
+from file_organizer.config.utils import (
     add_category_to_file_categories,
     delete_category_from_file_categories,
     edit_category_from_file_categories,
     load_config,
     show_better_file_categories,
 )
-from src.core.logo_manager import show_smart_logo
-from src.core.utils import clearscreen
+from file_organizer.core.logo_manager import show_smart_logo
+from file_organizer.core.utils import clearscreen
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.config.config_type_hint import Category, SizeVariant
+    from file_organizer.config.config_type_hint import Category, SizeVariant
 
 # --Choices options--
 INTERACTIVE_CONSOLE = 1
@@ -122,7 +123,8 @@ def get_category_info() -> Category:
 
     variants: list[SizeVariant] = []
     add_variants: bool = typer.confirm(
-        "Do you want to add size variants?", default=False
+        "Do you want to add size variants?",
+        default=False,
     )
     while add_variants:
         variant_name = typer.prompt("Enter variant name")
@@ -138,7 +140,8 @@ def get_category_info() -> Category:
         )
 
         add_variants = typer.confirm(
-            "Do you want to add another variant?", default=False
+            "Do you want to add another variant?",
+            default=False,
         )
 
     return {

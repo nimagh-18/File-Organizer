@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
-from src.filesystem.dir_cleaner import remove_dirs
-from src.history.manager import get_last_history, undo_files
+from file_organizer.filesystem.beautiful_display_and_progress import (
+    BeautifulDisplayAndProgress,
+)
+from file_organizer.filesystem.dir_cleaner import remove_dirs
+from file_organizer.history.manager import get_last_history, undo_files
 
 app = typer.Typer()
 

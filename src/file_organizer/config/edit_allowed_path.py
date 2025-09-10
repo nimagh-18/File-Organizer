@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
-import yaml
 import platform
 from pathlib import Path
 
 import typer
+import yaml
+
+from file_organizer.config.file_allowed_logs_config_path import file_categories_path
 
 
 def add_allowed_path_to_config(
-    new_path: str, config_path: Path = Path("src/config/allowed_path.yaml"),
+    new_path: str,
+    config_path: Path = file_categories_path,
 ) -> None:
     """
     Adds a new path to the list of allowed paths in the config file

@@ -15,12 +15,14 @@ from pathlib import Path
 
 import typer
 import yaml
-from src.config.config_type_hint import Category, FileCategories, SizeVariant
-from src.config.read_config import read_config
+
+from file_organizer.config.config_type_hint import Category, FileCategories, SizeVariant
+from file_organizer.config.file_allowed_logs_config_path import file_categories_path
+from file_organizer.config.read_config import read_config
 
 
 def validate_file_categories(
-    config_path: Path = Path("src/config/file_categories.yaml"),
+    config_path: Path = file_categories_path,
 ) -> bool:
     """
     Main validation function that orchestrates the validation process.
@@ -73,6 +75,7 @@ def _validate_top_level(config: FileCategories) -> list[str]:
         >>> errors = _validate_top_level({"categories": []})
         >>> len(errors)
         0
+
     """
     errors: list[str] = []
     if not isinstance(config, dict):
@@ -103,6 +106,7 @@ def _validate_categories(categories: list[Category]) -> list[str]:
         >>> errors = _validate_categories(categories)
         >>> len(errors)
         0
+
     """
     errors: list[str] = []
 
@@ -139,6 +143,7 @@ def _validate_single_category(category: Category, category_num: int) -> list[str
         >>> errors = _validate_single_category(category, 1)
         >>> len(errors)
         0
+
     """
     errors: list[str] = []
     required_keys = {"name", "extensions", "type"}
@@ -206,6 +211,7 @@ def _validate_variants(variants: list[SizeVariant], category: Category) -> list[
         >>> errors = _validate_variants(variants, 1)
         >>> len(errors)
         0
+
     """
     errors: list[str] = []
 
@@ -254,6 +260,7 @@ def _display_validation_result(errors: list[str]) -> bool:
         True
         >>> _display_validation_result(["Error 1"])
         False
+
     """
     if not errors:
         typer.echo(typer.style("✓ Configuration is valid!", fg=typer.colors.GREEN))

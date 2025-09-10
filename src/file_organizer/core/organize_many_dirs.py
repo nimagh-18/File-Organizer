@@ -13,13 +13,16 @@ from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
-from src.core.validator import load_config, validate_directory_access
-from src.filesystem.beautiful_display_and_progress import BeautifulDisplayAndProgress
-from src.filesystem.create_and_move import create_dirs_and_move_files
-from src.filesystem.dir_cleaner import remove_dirs
+
+from file_organizer.core.validator import load_config, validate_directory_access
+from file_organizer.filesystem.beautiful_display_and_progress import (
+    BeautifulDisplayAndProgress,
+)
+from file_organizer.filesystem.create_and_move import create_dirs_and_move_files
+from file_organizer.filesystem.dir_cleaner import remove_dirs
 
 if TYPE_CHECKING:
-    from src.config.config_type_hint import FileCategories
+    from file_organizer.config.config_type_hint import FileCategories
 
 console = Console()
 
@@ -32,8 +35,37 @@ def organize_many_dirs(
     force: bool,
     skip_confirmation: bool,
     recursive: bool,
-    pattern: str = "*",
+    pattern: str,
+    iteration_depth: int,
 ) -> None:
+    """
+    Organize multiple directories simultaneously using configured categorization rules.
+
+    This function processes a comma-separated list of directory paths, validates their
+    accessibility, and organizes files into categorized subdirectories based on file
+    extensions and size rules defined in the configuration. It supports dry-run mode,
+    recursive traversal, glob pattern filtering, hidden file inclusion, and depth limiting.
+    Progress is displayed with rich formatting, and empty directories are cleaned up after
+    organization.
+
+    :param paths: Comma-separated string of directory paths to organize (e.g., "/path1,/path2").
+    :param include_hidden: If True, includes hidden files (starting with '.') in the organization.
+    :param dry_run: If True, simulates the organization without making changes.
+    :param force: If True, bypasses security checks for restricted directories.
+    :param skip_confirmation: If True, skips user confirmation prompts.
+    :param recursive: If True, organizes files in subdirectories recursively.
+    :param pattern: Glob pattern to match files (e.g., "*.txt", "*.{jpg,png}"). Defaults to "*".
+    :param iteration_depth: Maximum recursion depth for subdirectories (-1 for unlimited).
+    :returns: None
+    :raises typer.Exit: If no valid paths are provided, paths fail validation, or user cancels the operation.
+    :example:
+
+        Organize two directories with a depth limit of 2:
+
+        .. code-block:: bash
+
+            organizer organize /path/to/dir1,/path/to/dir2 --depth 2 --pattern "*.txt"
+    """
     # Parse and clean input paths
     path_list: list[Path] = [Path(p.strip()) for p in paths.split(",") if p.strip()]
 
@@ -60,7 +92,10 @@ def organize_many_dirs(
         raise typer.Exit(1)
 
     # Load configuration once for all directories
-    file_categories: FileCategories = load_config(file_categories=True)
+    file_categories: FileCategories = load_config(
+        file_categories=True,
+        optimization=True,
+    )
 
     # Request user confirmation unless skipped
     if not dry_run and not skip_confirmation:
@@ -101,6 +136,7 @@ def organize_many_dirs(
             new_history_file=new_history_file,
             last_dir=last_dir,
             pattern=pattern,
+            iteration_depth=iteration_depth,
         )
 
         total_moved += moved
@@ -110,7 +146,8 @@ def organize_many_dirs(
         # Clean empty directories after organization
         if not dry_run:
             removed_count, remove_errors = remove_dirs(
-                path=directory_path, dry_run=dry_run
+                path=directory_path,
+                dry_run=dry_run,
             )
             total_created_dirs += removed_count
             total_errors += remove_errors

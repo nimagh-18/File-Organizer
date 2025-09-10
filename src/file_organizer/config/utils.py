@@ -13,10 +13,15 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
-from src.config.read_config import read_config
+
+from file_organizer.config.file_allowed_logs_config_path import (
+    default_allowed_path,
+    file_categories_path,
+)
+from file_organizer.config.read_config import read_config
 
 if TYPE_CHECKING:
-    from src.config.config_type_hint import (
+    from file_organizer.config.config_type_hint import (
         Category,
         DefaultPaths,
         FileAndPathConfig,
@@ -29,14 +34,14 @@ console = Console()
 
 def add_category_to_file_categories(
     category: Category,
-    config_path: Path = Path("src/config/file_categories.yaml"),
+    file_categories_path: Path = file_categories_path,
 ) -> None:
     """
     Add a new category to the file categories YAML configuration.
 
     Args:
         category: The category dictionary to add
-        config_path: Path to the YAML config file
+        file_categories_path: Path to the YAML config file
 
     Raises:
         typer.Exit: If there's an error reading or writing the file
@@ -53,7 +58,7 @@ def add_category_to_file_categories(
     """
     try:
         # Read existing config
-        file_categories = read_config(config_path, optimization=False)
+        file_categories = read_config(file_categories_path, optimization=False)
 
         # Initialize categories list if not exists
         file_categories.setdefault("categories", [])
@@ -83,7 +88,7 @@ def add_category_to_file_categories(
         file_categories["categories"].append(category)
 
         # Write back to file
-        with open(config_path, "w", encoding="utf-8") as file:
+        with open(file_categories_path, "w", encoding="utf-8") as file:
             yaml.safe_dump(
                 file_categories,
                 file,
@@ -118,24 +123,25 @@ def backup_config(config_path: Path) -> Path:
 
 def delete_category_from_file_categories(
     category_name: str,
-    config_path: Path = Path("src/config/file_categories.yaml"),
+    file_categories_path: Path = file_categories_path,
 ) -> None:
     """
     Delete a category from the file categories YAML configuration.
 
     Args:
         category_name: Name of the category to delete
-        config_path: Path to the YAML config file
+        file_categories_path: Path to the YAML config file
 
     Raises:
         typer.Exit: If there's an error reading or writing the file
 
     Example:
         >>> delete_category_from_file_categories("Videos")
+
     """
     try:
         # Read existing config
-        file_categories = read_config(config_path, optimization=False)
+        file_categories = read_config(file_categories_path, optimization=False)
 
         # Check if category exists
         if not any(
@@ -144,21 +150,22 @@ def delete_category_from_file_categories(
         ):
             typer.echo(
                 typer.style(
-                    f"Category '{category_name}' not found!", fg=typer.colors.YELLOW
+                    f"Category '{category_name}' not found!",
+                    fg=typer.colors.YELLOW,
                 )
             )
             return
 
         # Confirm deletion
         if not typer.confirm(
-            f"Are you sure you want to delete category '{category_name}'?"
+            f"Are you sure you want to delete category '{category_name}'?",
         ):
             raise typer.Abort()
 
         # Create backup
-        backup_file = backup_config(config_path)
+        backup_file = backup_config(file_categories_path)
         typer.echo(
-            typer.style(f"Backup created at: {backup_file}", fg=typer.colors.BLUE)
+            typer.style(f"Backup created at: {backup_file}", fg=typer.colors.BLUE),
         )
 
         # Delete category
@@ -169,7 +176,7 @@ def delete_category_from_file_categories(
         ]
 
         # Write back to file
-        with open(config_path, "w", encoding="utf-8") as file:
+        with open(file_categories_path, "w", encoding="utf-8") as file:
             yaml.safe_dump(
                 file_categories,
                 file,
@@ -206,7 +213,7 @@ def delete_category_from_file_categories(
 
 def edit_category_from_file_categories(
     category_name: str,
-    config_path: Path = Path("src/config/file_categories.yaml"),
+    file_categories_path: Path = file_categories_path,
 ) -> None:
     """
     Edit a specific category from the file categories configuration.
@@ -219,11 +226,9 @@ def edit_category_from_file_categories(
     - Writes updated configuration back to the YAML file
 
     :param category_name: The name of the category to edit.
-    :type category_name: str
-    :param config_path: Path to the YAML configuration file.
-    :type config_path: Path
+    :param file_categories_path: Path to the YAML configuration file.
     """
-    file_categories = read_config(config_path, optimization=False)
+    file_categories = read_config(file_categories_path, optimization=False)
 
     if "categories" not in file_categories:
         typer.secho("Missing required 'categories' key", fg=typer.colors.RED)
@@ -258,7 +263,7 @@ def edit_category_from_file_categories(
         return
 
     file_categories["categories"][category_index] = updated_category
-    with open(config_path, "w", encoding="utf-8") as file:
+    with open(file_categories_path, "w", encoding="utf-8") as file:
         yaml.safe_dump(
             file_categories,
             file,
@@ -454,7 +459,10 @@ def _show_changes_diff_tree(
 
 
 def load_config(
-    *, file_categories: bool = True, allowed_paths: bool = False
+    *,
+    file_categories: bool = True,
+    allowed_paths: bool = False,
+    optimization: bool = False
 ) -> FileCategories | DefaultPaths | FileAndPathConfig:
     """
     Load specific or combined configurations from YAML files.
@@ -465,12 +473,13 @@ def load_config(
     loaded_configs = {}
     if file_categories:
         loaded_configs["file_categories"] = read_config(
-            Path("src/config/file_categories.yaml")
+            file_categories_path,
+            optimization=optimization,
         )
 
     if allowed_paths:
         loaded_configs["allowed_paths"] = read_config(
-            Path("src/config/allowed_path.yaml")
+            default_allowed_path,
         )
 
     if not loaded_configs:
@@ -599,7 +608,8 @@ def _display_with_typer(file_categories: FileCategories) -> None:
         typer.echo(
             typer.style("Defaults:", fg=typer.colors.BRIGHT_BLUE)
             + typer.style(
-                f" {defaults.get('name', 'Not specified')}", fg=typer.colors.WHITE
+                f" {defaults.get('name', 'Not specified')}",
+                fg=typer.colors.WHITE,
             )
         )
 
@@ -610,7 +620,7 @@ def _display_with_typer(file_categories: FileCategories) -> None:
         # Category name
         typer.echo(
             typer.style(f"{index}.Category:", fg=typer.colors.BRIGHT_BLUE)
-            + typer.style(f" {category.get('name', 'Unnamed')}", fg=typer.colors.WHITE)
+            + typer.style(f" {category.get('name', 'Unnamed')}", fg=typer.colors.WHITE),
         )
 
         # Extensions
@@ -626,11 +636,11 @@ def _display_with_typer(file_categories: FileCategories) -> None:
         # Type and Risk
         typer.echo(
             typer.style("  Type:", fg=typer.colors.BRIGHT_BLUE)
-            + typer.style(f" {category.get('type', 'N/A')}", fg=typer.colors.WHITE)
+            + typer.style(f" {category.get('type', 'N/A')}", fg=typer.colors.WHITE),
         )
         typer.echo(
             typer.style("  Risk:", fg=typer.colors.BRIGHT_BLUE)
-            + typer.style(f" {category.get('risk', 'N/A')}", fg=typer.colors.WHITE)
+            + typer.style(f" {category.get('risk', 'N/A')}", fg=typer.colors.WHITE),
         )
 
         # Variants or size constraints
@@ -644,7 +654,8 @@ def _display_with_typer(file_categories: FileCategories) -> None:
                         fg=typer.colors.BRIGHT_BLUE,
                     )
                     + typer.style(
-                        f" Size: {min_size}MB - {max_size}MB", fg=typer.colors.WHITE
+                        f" Size: {min_size}MB - {max_size}MB",
+                        fg=typer.colors.WHITE,
                     )
                 )
         else:
@@ -654,7 +665,8 @@ def _display_with_typer(file_categories: FileCategories) -> None:
                 typer.echo(
                     typer.style("  Size Range:", fg=typer.colors.BRIGHT_BLUE)
                     + typer.style(
-                        f" {min_size}MB - {max_size}MB", fg=typer.colors.WHITE
+                        f" {min_size}MB - {max_size}MB",
+                        fg=typer.colors.WHITE,
                     )
                 )
 
