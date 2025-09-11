@@ -18,7 +18,7 @@ from file_organizer.core.validator import load_config, validate_directory_access
 from file_organizer.filesystem.beautiful_display_and_progress import (
     BeautifulDisplayAndProgress,
 )
-from file_organizer.filesystem.create_and_move import create_dirs_and_move_files
+from file_organizer.filesystem.create_and_move import LocalFileOrganizer
 from file_organizer.filesystem.dir_cleaner import remove_dirs
 
 if TYPE_CHECKING:
@@ -127,8 +127,7 @@ def organize_many_dirs(
             f"\n[bold blue]📁 Processing directory {i}/{len(valid_paths)}: {directory_path}[/bold blue]"
         )
 
-        # This will show progress but won't spam console with individual file messages
-        moved, created_dirs, errors = create_dirs_and_move_files(
+        organizer = LocalFileOrganizer(
             directory_path,
             file_categories,
             dry_run=dry_run,
@@ -139,9 +138,18 @@ def organize_many_dirs(
             iteration_depth=iteration_depth,
         )
 
-        total_moved += moved
+        # This will show progress but won't spam console with individual file messages
+        organizer.organize()
+
+        stats: dict[str, int] = organizer.stats()
+
+        moved: int          = stats["moved"]
+        created_dirs: int   = stats["created"]
+        errors: int         = stats["errors"]
+
+        total_moved        += moved
         total_created_dirs += created_dirs
-        total_errors += errors
+        total_errors       += errors
 
         # Clean empty directories after organization
         if not dry_run:

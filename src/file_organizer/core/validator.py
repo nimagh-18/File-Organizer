@@ -138,8 +138,7 @@ def _validate_input(pattern: str, console: Console) -> bool:
 
     if pattern.strip() == "*":
         console.print("[yellow]Warning: Pattern '*' will match all files[/yellow]")
-        if not typer.confirm("Continue with catch-all pattern?"):
-            raise typer.Exit(1)
+        return True
 
     return True
 
@@ -166,7 +165,7 @@ def _validate_syntax_structure(pattern: str, console: Console) -> bool:
             "[yellow]  'file[0-9].txt' - matches file0.txt to file9.txt[/yellow]"
         )
         console.print("[yellow]  'image[!0-9].jpg' - excludes digits[/yellow]")
-        raise typer.Exit(1)  # ✅ این خط باید اضافه شود
+        raise typer.Exit(1)
 
     # Check for unbalanced braces
     if pattern.count("{") != pattern.count("}"):
@@ -176,7 +175,7 @@ def _validate_syntax_structure(pattern: str, console: Console) -> bool:
         console.print(
             "[yellow]  'file{1..3}.txt' - matches file1.txt to file3.txt[/yellow]"
         )
-        raise typer.Exit(1)  # ✅ این خط باید اضافه شود
+        raise typer.Exit(1)
 
     # Check for invalid recursive wildcard usage
     if "**" in pattern and not (
@@ -187,10 +186,9 @@ def _validate_syntax_structure(pattern: str, console: Console) -> bool:
         console.print("[yellow]  '**/*.txt' - all txt files recursively[/yellow]")
         console.print("[yellow]  'docs/**' - all files in docs/ recursively[/yellow]")
         console.print(
-            "[yellow]  'images/**/*.jpg' - jpg files in images/ subdirs[/yellow]"
+            "[yellow]  'images/**/*.jpg' - jpg files in images/ subdirs[/yellow]",
         )
-        raise typer.Exit(1)  # ✅ این خط باید اضافه شود
-
+        raise typer.Exit(1)
     return True
 
 
@@ -219,7 +217,7 @@ def _check_practical_issues(pattern: str, console: Console) -> bool:
         console.print("[yellow]Warning: Literal bracket pattern detected[/yellow]")
         console.print("[yellow]  '[.*]' matches literal dots/stars, not wildcards")
         console.print(
-            "[yellow]  Did you mean '*' for wildcard or '?' for single char?[/yellow]"
+            "[yellow]  Did you mean '*' for wildcard or '?' for single char?[/yellow]",
         )
         if not typer.confirm("Continue with literal pattern?"):
             raise typer.Exit(1)
@@ -300,8 +298,6 @@ def _validate_with_pathlib_engine(pattern: str, console: Console) -> bool:
         test_path = Path("test_file.txt")
         test_path.match(pattern)
 
-        return True
-
     except (ValueError, re.error) as e:
         # Patterns that pathlib genuinely rejects
         console.print(f"[red]Error: Invalid pattern syntax: {str(e)}[/red]")
@@ -316,3 +312,5 @@ def _validate_with_pathlib_engine(pattern: str, console: Console) -> bool:
     except Exception as e:
         console.print(f"[red]Unexpected validation error: {str(e)}[/red]")
         raise typer.Exit(1)
+    else:
+        return True

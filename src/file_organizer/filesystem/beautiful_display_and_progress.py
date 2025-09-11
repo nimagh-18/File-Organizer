@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from file_organizer.config.config_type_hint import FileCategories
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import (
@@ -16,6 +15,8 @@ from rich.progress import (
 )
 from rich.table import Table
 from rich.text import Text
+
+from file_organizer.config.config_type_hint import FileCategories
 
 
 class BeautifulDisplayAndProgress:

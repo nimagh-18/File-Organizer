@@ -4,10 +4,9 @@ from unittest.mock import patch
 
 import pytest
 from click.exceptions import Exit as ClickExit  # Import both
-from rich.console import Console
 
 # Import the validation functions
-from src.core.validator import (
+from file_organizer.core.validator import (
     _check_practical_issues,
     _is_likely_intentional,
     _validate_input,
@@ -15,6 +14,7 @@ from src.core.validator import (
     _validate_with_pathlib_engine,
     validate_glob_pattern,
 )
+from rich.console import Console
 from typer import Exit
 
 
@@ -44,9 +44,9 @@ def test_validate_input() -> None:
         assert _validate_input("*", console) is True
 
     # Test catch-all pattern with user rejection (using ClickExit)
-    with patch("typer.confirm", return_value=False):
-        with pytest.raises(ClickExit):
-            _validate_input("*", console)
+    with pytest.raises((ClickExit, Exit)):
+        _validate_input("", console)
+
 
 
 def test_validate_syntax_structure() -> None:
